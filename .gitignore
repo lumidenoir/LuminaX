@@ -1,0 +1,57 @@
+# ==============================================================================
+# LuminaX & MPV Git Ignore
+# ==============================================================================
+
+# Release Distribution Artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# Python & Runtime Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# MPV Runtime State & Cache
+watch_later/
+mpv_history/
+state/
+*.cache
+*.log
+mpv.log
+*.sock
+*.tmp
+*.bak
+*.orig
+*~
+
+# User Personal Configurations (Only clean .def.conf templates are tracked)
+mpv.conf
+input.conf
+script-opts/*.conf
+!script-opts/*.def.conf
+!*.def.conf
+*.local.conf
+script-opts/*.local.conf
+
+# Operating System Metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Editor & IDE Directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
