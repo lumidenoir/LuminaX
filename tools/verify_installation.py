@@ -26,38 +26,7 @@ def main():
     platform_name = "Windows" if is_windows else ("macOS" if sys.platform == "darwin" else "Linux")
     print(f"Platform: {platform_name} ({sys.platform})")
 
-    # 1. Check binaries
-    print("\n[1/5] Checking Required Binaries...")
-    binaries = {
-        "mpv": {"req": True, "ver_flag": "--version"},
-        "ffmpeg": {"req": True, "ver_flag": "-version"},
-        "curl": {"req": True, "ver_flag": "--version"},
-        "mkvpropedit": {"req": False, "ver_flag": "--version"},
-    }
-
-    all_req_bins = True
-    for b, meta in binaries.items():
-        path = shutil.which(b)
-        if not path and is_windows:
-            # Check mpv portable local dir
-            for cand in [f"{b}.exe", os.path.join(".", f"{b}.exe")]:
-                if os.path.exists(cand):
-                    path = os.path.abspath(cand)
-                    break
-        if path:
-            ok, out, _ = run_command([path, meta["ver_flag"]])
-            first_line = out.split("\n")[0] if out else "installed"
-            print(f"  ✓ {b:<12} Found at: {path} ({first_line[:45]})")
-        else:
-            if meta["req"]:
-                all_req_bins = False
-                print(f"  ✗ {b:<12} NOT FOUND in PATH! (Required)")
-            else:
-                print(f"  ℹ {b:<12} Not found (Optional: used for permanent MKV file tag writing)")
-
-    # 2. Check mpv Directory & Scripts
-    print("\n[2/5] Checking LuminaX Directory Structure...")
-    # Determine base dir
+    # 1. Determine mpv Directory & Base Environment
     cwd = os.getcwd()
     if len(sys.argv) > 1 and sys.argv[1].strip():
         mpv_dir = os.path.abspath(sys.argv[1].strip())
@@ -86,7 +55,47 @@ def main():
 
     print(f"Target mpv Directory: {mpv_dir}")
 
+    # 2. Check binaries
+    print("\n[1/5] Checking Required Binaries...")
+    binaries = {
+        "mpv": {"req": True, "ver_flag": "--version"},
+        "ffmpeg": {"req": True, "ver_flag": "-version"},
+        "curl": {"req": True, "ver_flag": "--version"},
+        "mkvpropedit": {"req": False, "ver_flag": "--version"},
+    }
+
+    all_req_bins = True
+    for b, meta in binaries.items():
+        path = shutil.which(b)
+        if not path and is_windows:
+            # Check mpv folder and portable local dir
+            cand_paths = [
+                f"{b}.exe",
+                os.path.join(".", f"{b}.exe"),
+                os.path.join(mpv_dir, f"{b}.exe"),
+                os.path.join(os.path.dirname(mpv_dir), f"{b}.exe"),
+            ]
+            for cand in cand_paths:
+                if os.path.exists(cand):
+                    path = os.path.abspath(cand)
+                    break
+        if path:
+            ok, out, _ = run_command([path, meta["ver_flag"]])
+            first_line = out.split("\n")[0] if out else "installed"
+            print(f"  ✓ {b:<12} Found at: {path} ({first_line[:45]})")
+        else:
+            if meta["req"]:
+                all_req_bins = False
+                print(f"  ✗ {b:<12} NOT FOUND in PATH or mpv directory! (Required)")
+            else:
+                print(f"  ℹ {b:<12} Not found (Optional: used for permanent MKV file tag writing)")
+
+    # 3. Check mpv Directory & Scripts
+    print("\n[2/5] Checking LuminaX Directory Structure...")
+
     required_files = [
+        os.path.join("scripts", "autoload.lua"),
+        os.path.join("scripts", "thumbfast.lua"),
         os.path.join("scripts", "LuminaX", "main.lua"),
         os.path.join("scripts", "LuminaX", "modules", "utils.lua"),
         os.path.join("scripts", "LuminaX", "modules", "osc.lua"),

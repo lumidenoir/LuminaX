@@ -40,6 +40,7 @@ function M.find_mkvpropedit()
     local mpv_dir = mp.command_native({'expand-path', '~~/'}) or ''
     if mpv_dir ~= '' then
         table.insert(candidates, mpv_dir .. 'mkvpropedit.exe')
+        table.insert(candidates, mpv_dir .. '../mkvpropedit.exe')
         table.insert(candidates, mpv_dir .. 'mkvpropedit')
     end
     table.insert(candidates, 'C:\\Program Files\\MKVToolNix\\mkvpropedit.exe')

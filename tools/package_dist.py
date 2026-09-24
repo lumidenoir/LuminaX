@@ -53,8 +53,11 @@ def build_packages():
 
     # 1. Prepare Staging Tree
     print("\n[1/4] Preparing Clean Distribution Staging Tree...")
-    # Copy scripts/LuminaX
+    # Copy scripts/LuminaX and companion scripts (autoload.lua, thumbfast.lua)
     shutil.copytree("scripts/LuminaX", os.path.join(stage_dir, "scripts", "LuminaX"), dirs_exist_ok=True)
+    for s in os.listdir("scripts"):
+        if s.endswith(".lua"):
+            shutil.copy2(os.path.join("scripts", s), os.path.join(stage_dir, "scripts", s))
     # Copy fonts
     shutil.copytree("fonts", os.path.join(stage_dir, "fonts"), dirs_exist_ok=True)
     # Copy script-opts

@@ -64,7 +64,7 @@ echo -e "\nosc=no\nosd-bar=no\nosd-font=\"Inter\"" >> ~/.config/mpv/mpv.conf
 
 ### Option B: Windows Installation
 
-#### 1-Click Automated Install:
+#### 1-Click Automated Install (Recommended):
 * **From Release Package (`.zip`):**
   * **Batch:** Double-click `install.bat`
   * **PowerShell:** Right-click `install.ps1` and select **Run with PowerShell**
@@ -72,15 +72,35 @@ echo -e "\nosc=no\nosd-bar=no\nosd-font=\"Inter\"" >> ~/.config/mpv/mpv.conf
   * **Batch:** Double-click `tools\install.bat`
   * **PowerShell:** Right-click `tools\install.ps1` and select **Run with PowerShell**
 
+The automated Windows installer automatically:
+1. **Auto-Detects mpv**: Finds portable mpv installations (in `Downloads`, `C:\mpv`, Scoop, etc.) or standard `%APPDATA%\mpv` and configures `portable_config`.
+2. **Auto-Links FFmpeg**: Locates `ffmpeg.exe` (in `%PATH%`, `Downloads`, etc.) and links/copies it directly next to `mpv.exe` so mpv can run it natively with zero PATH configuration.
+3. **Optional User PATH Integration**: Prompts or allows adding your mpv folder to Windows User `%PATH%` (enabling `mpv` and `ffmpeg` commands from any terminal).
+4. **Registers Fonts**: Installs and registers UI fonts (`Inter`, `uosc_icons`) in the Windows User Font Registry to eliminate missing glyph boxes (`[]`).
+5. **Configures Settings**: Sets `osc=no` and `osd-bar=no` in `mpv.conf`, installs `input.conf` keybindings, and preserves any existing TMDB API keys.
+
+#### Adding mpv and FFmpeg to Windows PATH Manually:
+If you prefer to configure your Windows PATH manually without the installer:
+* **Option 1: One-Line PowerShell (No Admin Required):**
+  ```powershell
+  # Replace C:\mpv with the folder containing your mpv.exe and ffmpeg.exe
+  [Environment]::SetEnvironmentVariable("PATH", "$([Environment]::GetEnvironmentVariable('PATH', 'User'));C:\mpv", "User")
+  ```
+* **Option 2: Windows GUI:**
+  1. Press `Win + R`, type `sysdm.cpl` and press **Enter**.
+  2. Go to the **Advanced** tab and click **Environment Variables**.
+  3. Under **User variables**, select **Path** and click **Edit**.
+  4. Click **New**, paste the folder path containing `mpv.exe` and `ffmpeg.exe` (e.g. `C:\mpv`), and click **OK**.
+
 #### Manual Windows Install (Takes less than 3 minutes):
 1. **Locate your mpv config folder:**
    * **Standard / Scoop / Chocolatey:** Press `Win + R`, type `%APPDATA%\mpv` and press `Enter` (`C:\Users\<YourUsername>\AppData\Roaming\mpv`).
-   * **Portable mpv (`portable_config`):** Inside your mpv directory where `mpv.exe` lives, open the `portable_config` folder.
+   * **Portable mpv (`portable_config`):** Inside your mpv directory where `mpv.exe` lives, open or create the `portable_config` folder.
 2. **Copy the files:**
    * Copy `scripts\LuminaX` into `mpv\scripts\`
    * Copy all files from `fonts\` into `mpv\fonts\`
-   * Copy `script-opts\osc.conf` into `mpv\script-opts\osc.conf`
-   * Copy `input.conf` into `mpv\input.conf`
+   * Copy `script-opts\osc.def.conf` (or `osc.conf`) into `mpv\script-opts\osc.conf`
+   * Copy `input.def.conf` (or `input.conf`) into `mpv\input.conf`
 3. **Configure `mpv.conf`:**
    Open `mpv.conf` in Notepad (create it if missing) and ensure these lines are present:
    ```ini
@@ -89,7 +109,25 @@ echo -e "\nosc=no\nosd-bar=no\nosd-font=\"Inter\"" >> ~/.config/mpv/mpv.conf
    osd-font="Inter"
    ```
 4. **Ensure `ffmpeg.exe` is available:**
-   Make sure `ffmpeg.exe` is either in your Windows `PATH` or placed directly in the same folder as `mpv.exe`.
+   Make sure `ffmpeg.exe` is placed directly in the same folder as `mpv.exe` or is in your Windows `PATH`.
+
+---
+
+## 💾 Cache & Performance Optimization
+
+LuminaX maintains a local cache to deliver instantaneous Infuse/Apple TV-grade screensavers without re-downloading or re-processing art:
+
+* **Cache Location:**
+  * **Portable mpv:** `<mpv_folder>\portable_config\cache\luminax\`
+  * **Standard Install:** `%LOCALAPPDATA%\mpv\luminax\` or `%TEMP%\mpv_luminax\`
+  * **Linux / macOS:** `~/.cache/mpv/luminax/` or `$XDG_CACHE_HOME/mpv/luminax/`
+* **What is Cached?**
+  * TMDB API movie and show metadata responses (JSON).
+  * High-resolution official movie logos (transparent PNGs).
+  * Pre-rendered hardware-accelerated BGRA Lanczos overlays for instantaneous `< 0.002s` display.
+* **Cache Management:**
+  * Automatic fallback: If offline or playing unknown streams, offline ambient cards are displayed with zero network delay.
+  * Tag Editor purge: Renaming a title or clicking **"Clean All Junk Watermarks"** (`T` shortcut) immediately clears stale cache entries for that file and queries TMDB with the cleaned name.
 
 ---
 

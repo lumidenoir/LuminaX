@@ -57,8 +57,14 @@ mkdir -p "$TARGET_DIR/script-opts"
 if [ "$CANON_PKG" = "$CANON_TARGET" ]; then
     echo -e "${YELLOW}Target directory is identical to source package root; files already in place.${NC}"
 else
-    echo "Installing LuminaX modules..."
+    echo "Installing LuminaX modules & companion scripts..."
+    mkdir -p "$TARGET_DIR/scripts"
     cp -r "$PACKAGE_ROOT/scripts/LuminaX/"* "$TARGET_DIR/scripts/LuminaX/"
+    for script in "$PACKAGE_ROOT/scripts/"*.lua; do
+        if [ -f "$script" ]; then
+            cp "$script" "$TARGET_DIR/scripts/"
+        fi
+    done
 
     echo "Installing UI & icon fonts to mpv/fonts/..."
     cp -r "$PACKAGE_ROOT/fonts/"* "$TARGET_DIR/fonts/"

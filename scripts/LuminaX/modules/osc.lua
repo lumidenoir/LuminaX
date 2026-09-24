@@ -217,6 +217,9 @@ local osc_styles = {
     elementHighlight = '{\\blur2\\bord0\\1c&HFFFFFF&}',
 }
 
+-- Element list (file-scoped forward declaration so mouse_hit and all handlers can access it)
+local elements = {}
+
 -- internal states, do not touch
 local state = {
     showtime,                               -- time of last invocation (last mouse move)
@@ -438,7 +441,8 @@ function mouse_hit(element)
     if (element.name == 'volumebar' or element.name == 'volumebarbg') then
         local vmode = user_opts.volume_slider_mode or 'hover'
         if vmode == 'never' then return false end
-        if vmode == 'hover' and (state.vol_anim or 0) < 0.35 and (state.active_element == nil or elements[state.active_element] ~= element) then
+        local active_elem = (state.active_element and elements and elements[state.active_element]) or nil
+        if vmode == 'hover' and (state.vol_anim or 0) < 0.35 and (active_elem ~= element) then
             return false
         end
     end
@@ -786,7 +790,7 @@ end
 -- Element Management
 --
 
-local elements = {}
+elements = {}
 
 function prepare_elements()
 
@@ -3128,8 +3132,23 @@ mp.observe_property('demuxer-cache-state', 'native', cache_state)
 mp.observe_property('vo-configured', 'bool', function(name, val)
     request_tick()
 end)
+local last_playback_t = nil
 mp.observe_property('playback-time', 'number', function(name, val)
+    if val and last_playback_t then
+        local delta = math.abs(val - last_playback_t)
+        -- Normal playback progress delta is ~0.02-0.25s. A seek jump is > 0.8s
+        if delta > 0.8 then
+            show_osc()
+        end
+    end
+    last_playback_t = val
     request_tick()
+end)
+
+mp.observe_property('seeking', 'bool', function(_, seeking)
+    if seeking then
+        show_osc()
+    end
 end)
 mp.observe_property('osd-dimensions', 'native', function(name, val)
     -- (we could use the value instead of re-querying it all the time, but then

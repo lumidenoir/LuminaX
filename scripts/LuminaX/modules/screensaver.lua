@@ -75,6 +75,9 @@ end
 
 local function safe_async_cmd(cmd_tbl, callback)
     if not (mp and mp.command_native_async) then return nil end
+    if cmd_tbl.playback_only == nil then
+        cmd_tbl.playback_only = false
+    end
     local handle
     local finished = false
     handle = mp.command_native_async(cmd_tbl, function(ok, res, err)
@@ -297,7 +300,7 @@ local function render_screensaver(alpha)
         if td.logos and td.logos[tier] then
             logo_info = td.logos[tier]
         elseif td.bgra_path and utils.file_info(td.bgra_path) then
-            logo_info = {path = td.bgra_path, w = td.logo_w or 520, h = td.logo_h or 134}
+            logo_info = {path = td.bgra_path, w = td.logo_w or 520, h = td.logo_h or 134, is_backdrop = td.is_backdrop}
         end
     end
 
@@ -423,6 +426,9 @@ local function render_screensaver(alpha)
         local est_h = 0
         if logo_info and logo_info.path and utils.file_info(logo_info.path) then
             est_h = est_h + math.floor(logo_info.h / scale_y) + (tier == 1 and 14 or 20)
+            if logo_info.is_backdrop then
+                est_h = est_h + math.floor(show_fs * 1.35) + 6
+            end
         else
             est_h = est_h + math.floor(show_fs * 1.35) + 6
         end
@@ -472,6 +478,22 @@ local function render_screensaver(alpha)
             ss_remove_logo()
         end
         cur_y = cur_y + math.floor(logo_info.h / scale_y) + (tier == 1 and 14 or 20)
+
+        if logo_info.is_backdrop then
+            ass:new_event()
+            if is_center then
+                ass:pos(VIRTUAL_W / 2, cur_y)
+                ass:an(8)
+            else
+                ass:pos(margin_x, cur_y)
+                ass:an(7)
+            end
+            ass:append(string.format(
+                '{\\fnInter\\b700\\fs%d\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
+                show_fs, a_hex))
+            ass:append(show_name)
+            cur_y = cur_y + math.floor(show_fs * 1.35) + 6
+        end
     else
         ss_remove_logo()
         ass:new_event()
@@ -818,7 +840,8 @@ local function make_dir_sync(dir)
     local is_win = (package.config:sub(1, 1) == '\\')
     if mp and mp.command_native then
         if is_win then
-            pcall(mp.command_native, {name = 'subprocess', playback_only = false, capture_stdout = true, args = {'cmd.exe', '/c', 'if not exist "' .. dir .. '" mkdir "' .. dir .. '"'}})
+            local win_dir = dir:gsub('/', '\\'):gsub('\\+$', '')
+            pcall(mp.command_native, {name = 'subprocess', playback_only = false, capture_stdout = true, args = {'cmd.exe', '/d', '/c', 'if not exist "' .. win_dir .. '" mkdir "' .. win_dir .. '"'}})
         else
             pcall(mp.command_native, {name = 'subprocess', playback_only = false, capture_stdout = true, args = {'mkdir', '-p', dir}})
         end
@@ -827,7 +850,8 @@ local function make_dir_sync(dir)
     if info and info.is_dir then return true end
 
     if is_win then
-        pcall(os.execute, 'mkdir "' .. dir .. '" 2>nul')
+        local win_dir = dir:gsub('/', '\\'):gsub('\\+$', '')
+        pcall(os.execute, 'mkdir "' .. win_dir .. '" 2>nul')
     else
         pcall(os.execute, 'mkdir -p "' .. dir .. '" 2>/dev/null')
     end
@@ -984,11 +1008,12 @@ local function fetch_tmdb_logo(search_type, show_id, cb)
                 if f1 and f1.size == (d.t1[1] * d.t1[2] * 4) and
                    f2 and f2.size == (d.t2[1] * d.t2[2] * 4) and
                    f3 and f3.size == (d.t3[1] * d.t3[2] * 4) then
+                    local is_bd = (d.is_backdrop == true)
                     cb({
                         [1] = {path = t1_bgra, w = d.t1[1], h = d.t1[2]},
                         [2] = {path = t2_bgra, w = d.t2[1], h = d.t2[2]},
                         [3] = {path = t3_bgra, w = d.t3[1], h = d.t3[2]},
-                    })
+                    }, is_bd)
                     return
                 end
             end
@@ -996,7 +1021,7 @@ local function fetch_tmdb_logo(search_type, show_id, cb)
     end
 
     local images_url = string.format(
-        'https://api.tmdb.org/3/%s/%d/images?api_key=%s&include_image_language=en,null,ja',
+        'https://api.tmdb.org/3/%s/%d/images?api_key=%s',
         search_type, show_id, key
     )
     safe_async_cmd({
@@ -1009,42 +1034,60 @@ local function fetch_tmdb_logo(search_type, show_id, cb)
             return
         end
         local img_data = utils.parse_json(res.stdout)
-        if not img_data or not img_data.logos or #img_data.logos == 0 then
+        if not img_data then
             cb(nil)
             return
         end
 
         local candidates = {}
-        for _, logo in ipairs(img_data.logos) do
-            local lw = logo.width or 0
-            local lh = logo.height or 0
-            if lw <= 6000 and lh >= 40 then
-                table.insert(candidates, logo)
+        local is_backdrop = false
+
+        if img_data.logos and #img_data.logos > 0 then
+            for _, logo in ipairs(img_data.logos) do
+                local lw = logo.width or 0
+                local lh = logo.height or 0
+                if lw <= 6000 and lh >= 40 then
+                    table.insert(candidates, logo)
+                end
+            end
+            if #candidates == 0 then candidates = img_data.logos end
+        end
+
+        if #candidates > 0 then
+            table.sort(candidates, function(a, b)
+                local a_en = (a.iso_639_1 == 'en')
+                local b_en = (b.iso_639_1 == 'en')
+                if a_en ~= b_en then return a_en end
+
+                local ar_a = a.aspect_ratio or (a.width and a.height and a.height > 0 and (a.width / a.height)) or 0
+                local ar_b = b.aspect_ratio or (b.width and b.height and b.height > 0 and (b.width / b.height)) or 0
+                local a_wide = (ar_a >= 4.0)
+                local b_wide = (ar_b >= 4.0)
+                if a_wide ~= b_wide then return a_wide end
+
+                local a_us = (a.iso_3166_1 == 'US')
+                local b_us = (b.iso_3166_1 == 'US')
+                if a_us ~= b_us then return a_us end
+
+                local a_vote = a.vote_average or 0
+                local b_vote = b.vote_average or 0
+                if a_vote ~= b_vote then return a_vote > b_vote end
+
+                return ar_a > ar_b
+            end)
+        else
+            -- Rich Fallback: When movie has no transparent logo on TMDB, use high-resolution backdrop or poster!
+            if img_data.backdrops and #img_data.backdrops > 0 then
+                is_backdrop = true
+                candidates = img_data.backdrops
+            elseif img_data.posters and #img_data.posters > 0 then
+                is_backdrop = true
+                candidates = img_data.posters
+            else
+                cb(nil)
+                return
             end
         end
-        if #candidates == 0 then candidates = img_data.logos end
-
-        table.sort(candidates, function(a, b)
-            local a_en = (a.iso_639_1 == 'en')
-            local b_en = (b.iso_639_1 == 'en')
-            if a_en ~= b_en then return a_en end
-
-            local ar_a = a.aspect_ratio or (a.width and a.height and a.height > 0 and (a.width / a.height)) or 0
-            local ar_b = b.aspect_ratio or (b.width and b.height and b.height > 0 and (b.width / b.height)) or 0
-            local a_wide = (ar_a >= 4.0)
-            local b_wide = (ar_b >= 4.0)
-            if a_wide ~= b_wide then return a_wide end
-
-            local a_us = (a.iso_3166_1 == 'US')
-            local b_us = (b.iso_3166_1 == 'US')
-            if a_us ~= b_us then return a_us end
-
-            local a_vote = a.vote_average or 0
-            local b_vote = b.vote_average or 0
-            if a_vote ~= b_vote then return a_vote > b_vote end
-
-            return ar_a > ar_b
-        end)
 
         local chosen_path = candidates[1] and candidates[1].file_path
         if not chosen_path or chosen_path == '' then
@@ -1076,11 +1119,16 @@ local function fetch_tmdb_logo(search_type, show_id, cb)
         end
 
         local function process_logo_ffmpeg(img_path, ow, oh, cb_ff)
-            local t1_w, t1_h = calc_tier(380, 98, ow, oh)
-            local t2_w, t2_h = calc_tier(520, 134, ow, oh)
-            local t3_w, t3_h = calc_tier(680, 175, ow, oh)
+            local max_w1, max_h1 = is_backdrop and 320 or 380, is_backdrop and 180 or 98
+            local max_w2, max_h2 = is_backdrop and 460 or 520, is_backdrop and 260 or 134
+            local max_w3, max_h3 = is_backdrop and 580 or 680, is_backdrop and 326 or 175
+
+            local t1_w, t1_h = calc_tier(max_w1, max_h1, ow, oh)
+            local t2_w, t2_h = calc_tier(max_w2, max_h2, ow, oh)
+            local t3_w, t3_h = calc_tier(max_w3, max_h3, ow, oh)
 
             local d = {
+                is_backdrop = is_backdrop,
                 t1 = {t1_w, t1_h},
                 t2 = {t2_w, t2_h},
                 t3 = {t3_w, t3_h}
@@ -1095,46 +1143,13 @@ local function fetch_tmdb_logo(search_type, show_id, cb)
             local t2_bgra = string.format('%s/logo_%d_t2_%dx%d.bgra', cdir, show_id, t2_w, t2_h)
             local t3_bgra = string.format('%s/logo_%d_t3_%dx%d.bgra', cdir, show_id, t3_w, t3_h)
 
-            -- Fast luminance & saturation probe on non-transparent pixels (scale to 16x16 raw RGBA)
-            safe_async_cmd({
-                name = 'subprocess',
-                args = {'ffmpeg', '-v', 'error', '-i', img_path, '-vf', 'scale=16:16,format=rgba', '-f', 'rawvideo', 'pipe:1'},
-                capture_stdout = true,
-            }, function(ok_p, res_p)
-                local pre_filter = ''
-                if ok_p and res_p and res_p.stdout and #res_p.stdout >= 64 then
-                    local raw = res_p.stdout
-                    local total_lum, total_sat, count = 0, 0, 0
-                    for i = 1, #raw, 4 do
-                        local a = raw:byte(i + 3)
-                        if a and a > 40 then
-                            local r = raw:byte(i)
-                            local g = raw:byte(i + 1)
-                            local b = raw:byte(i + 2)
-                            local max_c = math.max(r, g, b)
-                            local min_c = math.min(r, g, b)
-                            total_lum = total_lum + (0.299 * r + 0.587 * g + 0.114 * b)
-                            total_sat = total_sat + (max_c - min_c)
-                            count = count + 1
-                        end
-                    end
-                    if count > 0 then
-                        local avg_lum = total_lum / count
-                        local avg_sat = total_sat / count
-                        if avg_sat <= 28.0 and avg_lum < 65.0 then
-                            pre_filter = 'negate,'
-                        elseif avg_lum < 75.0 then
-                            pre_filter = 'eq=brightness=0.25:contrast=1.1,'
-                        end
-                    end
-                end
-
+            local function run_scale_ffmpeg(pre_filter)
                 local filter_str = string.format(
                     '[0:v]%ssplit=3[v1][v2][v3]; ' ..
                     '[v1]scale=%d:%d:flags=lanczos,premultiply=inplace=1,format=bgra[o1]; ' ..
                     '[v2]scale=%d:%d:flags=lanczos,premultiply=inplace=1,format=bgra[o2]; ' ..
                     '[v3]scale=%d:%d:flags=lanczos,premultiply=inplace=1,format=bgra[o3]',
-                    pre_filter,
+                    pre_filter or '',
                     t1_w, t1_h,
                     t2_w, t2_h,
                     t3_w, t3_h
@@ -1154,139 +1169,59 @@ local function fetch_tmdb_logo(search_type, show_id, cb)
                             [1] = {path = t1_bgra, w = t1_w, h = t1_h},
                             [2] = {path = t2_bgra, w = t2_w, h = t2_h},
                             [3] = {path = t3_bgra, w = t3_w, h = t3_h},
-                        })
+                        }, is_backdrop)
                     else
                         cb_ff(nil)
                     end
                 end)
-            end)
-        end
-
-        local py_script = [[
-import sys, json, warnings
-from PIL import Image, ImageFilter
-warnings.filterwarnings("ignore")
-try:
-    im = Image.open(sys.argv[1]).convert("RGBA")
-    a = im.split()[3]
-    bbox = a.point(lambda p: 255 if p > 10 else 0).getbbox()
-    if bbox:
-        im = im.crop(bbox)
-    pixels = [p for p in im.getdata() if p[3] > 40]
-    if pixels:
-        sat = sum(max(p[0],p[1],p[2]) - min(p[0],p[1],p[2]) for p in pixels) / len(pixels)
-        lum = sum(0.299*p[0] + 0.587*p[1] + 0.114*p[2] for p in pixels) / len(pixels)
-        if sat <= 25.0 and lum < 65.0:
-            r, g, b, a = im.split()
-            rgb = Image.merge("RGB", (r, g, b))
-            inv_rgb = Image.eval(rgb, lambda x: 255 - x)
-            r2, g2, b2 = inv_rgb.split()
-            im = Image.merge("RGBA", (r2, g2, b2, a))
-        elif sat <= 40.0 and lum < 80.0:
-            a = im.split()[3]
-            hr = max(3, int(im.height * 0.04))
-            halo_a = a.filter(ImageFilter.GaussianBlur(radius=hr))
-            halo = Image.new("RGBA", im.size, (255, 255, 255, 0))
-            halo.putalpha(halo_a.point(lambda p: int(p * 0.85)))
-            im = Image.alpha_composite(halo, im)
-    im.save(sys.argv[1])
-    orig_w, orig_h = im.size
-    def calc_tier(max_w, max_h, ow, oh):
-        scale = min(max_w / ow, max_h / oh)
-        w = max(2, int(round(ow * scale)))
-        h = max(2, int(round(oh * scale)))
-        if w % 2 != 0: w -= 1
-        if h % 2 != 0: h -= 1
-        return [w, h]
-    res = {
-        "t1": calc_tier(380, 98, orig_w, orig_h),
-        "t2": calc_tier(520, 134, orig_w, orig_h),
-        "t3": calc_tier(680, 175, orig_w, orig_h)
-    }
-    print(json.dumps(res))
-except Exception:
-    sys.exit(1)
-]]
-
-        local function try_python(bin_name, on_success, on_failure)
-            safe_async_cmd({
-                name = 'subprocess',
-                args = {bin_name, '-c', py_script, png_tmp},
-                capture_stdout = true,
-            }, function(ok_py, res_py)
-                if ok_py and res_py and res_py.stdout and res_py.stdout ~= '' then
-                    local d = utils.parse_json(res_py.stdout)
-                    if d and d.t1 and d.t2 and d.t3 then
-                        on_success(d, res_py.stdout)
-                        return
-                    end
-                end
-                on_failure()
-            end)
-        end
-
-        local function render_py_tiers(d, stdout_str)
-            local f_d = io.open(dims_file, 'w')
-            if f_d then
-                f_d:write(stdout_str)
-                f_d:close()
             end
 
-            local t1_w, t1_h = d.t1[1], d.t1[2]
-            local t2_w, t2_h = d.t2[1], d.t2[2]
-            local t3_w, t3_h = d.t3[1], d.t3[2]
-
-            local t1_bgra = string.format('%s/logo_%d_t1_%dx%d.bgra', cdir, show_id, t1_w, t1_h)
-            local t2_bgra = string.format('%s/logo_%d_t2_%dx%d.bgra', cdir, show_id, t2_w, t2_h)
-            local t3_bgra = string.format('%s/logo_%d_t3_%dx%d.bgra', cdir, show_id, t3_w, t3_h)
-
-            local filter_str = string.format(
-                '[0:v]split=3[v1][v2][v3]; ' ..
-                '[v1]scale=%d:%d:flags=lanczos,premultiply=inplace=1,format=bgra[o1]; ' ..
-                '[v2]scale=%d:%d:flags=lanczos,premultiply=inplace=1,format=bgra[o2]; ' ..
-                '[v3]scale=%d:%d:flags=lanczos,premultiply=inplace=1,format=bgra[o3]',
-                t1_w, t1_h,
-                t2_w, t2_h,
-                t3_w, t3_h
-            )
-            safe_async_cmd({
-                name = 'subprocess',
-                args = {
-                    'ffmpeg', '-y', '-i', png_tmp,
-                    '-filter_complex', filter_str,
-                    '-map', '[o1]', '-f', 'rawvideo', t1_bgra,
-                    '-map', '[o2]', '-f', 'rawvideo', t2_bgra,
-                    '-map', '[o3]', '-f', 'rawvideo', t3_bgra,
-                },
-            }, function(ok_ff, _)
-                if ok_ff and utils.file_info(t1_bgra) and utils.file_info(t2_bgra) and utils.file_info(t3_bgra) then
-                    cb({
-                        [1] = {path = t1_bgra, w = t1_w, h = t1_h},
-                        [2] = {path = t2_bgra, w = t2_w, h = t2_h},
-                        [3] = {path = t3_bgra, w = t3_w, h = t3_h},
-                    })
-                else
-                    process_logo_ffmpeg(png_tmp, chosen_w, chosen_h, cb)
-                end
-            end)
+            if is_backdrop then
+                run_scale_ffmpeg('')
+            else
+                -- Fast luminance & saturation probe on non-transparent logo pixels
+                safe_async_cmd({
+                    name = 'subprocess',
+                    args = {'ffmpeg', '-v', 'error', '-i', img_path, '-vf', 'scale=16:16,format=rgba', '-f', 'rawvideo', 'pipe:1'},
+                    capture_stdout = true,
+                }, function(ok_p, res_p)
+                    local pre_filter = ''
+                    if ok_p and res_p and res_p.stdout and #res_p.stdout >= 64 then
+                        local raw = res_p.stdout
+                        local total_lum, total_sat, count = 0, 0, 0
+                        for i = 1, #raw, 4 do
+                            local a = raw:byte(i + 3)
+                            if a and a > 40 then
+                                local r = raw:byte(i)
+                                local g = raw:byte(i + 1)
+                                local b = raw:byte(i + 2)
+                                local max_c = math.max(r, g, b)
+                                local min_c = math.min(r, g, b)
+                                total_lum = total_lum + (0.299 * r + 0.587 * g + 0.114 * b)
+                                total_sat = total_sat + (max_c - min_c)
+                                count = count + 1
+                            end
+                        end
+                        if count > 0 then
+                            local avg_lum = total_lum / count
+                            local avg_sat = total_sat / count
+                            if avg_sat <= 28.0 and avg_lum < 65.0 then
+                                pre_filter = 'negate,'
+                            elseif avg_lum < 75.0 then
+                                pre_filter = 'eq=brightness=0.25:contrast=1.1,'
+                            end
+                        end
+                    end
+                    run_scale_ffmpeg(pre_filter)
+                end)
+            end
         end
 
         local engine = user_opts.logo_engine or 'auto'
-        if engine == 'ffmpeg' then
+        if engine == 'ffmpeg' or engine == 'auto' or is_backdrop then
             process_logo_ffmpeg(png_tmp, chosen_w, chosen_h, cb)
-        elseif engine == 'python' then
-            try_python('python3', render_py_tiers, function()
-                try_python('python', render_py_tiers, function()
-                    cb(nil)
-                end)
-            end)
         else
-            -- Pipeline: python3 -> python -> Native FFmpeg -> Typography fallback
-            try_python('python3', render_py_tiers, function()
-                try_python('python', render_py_tiers, function()
-                    process_logo_ffmpeg(png_tmp, chosen_w, chosen_h, cb)
-                end)
-            end)
+            process_logo_ffmpeg(png_tmp, chosen_w, chosen_h, cb)
         end
     end)
     end)
@@ -1343,13 +1278,14 @@ local function fetch_tmdb_data(force_refresh)
                 disk_cached.logo_retry = true
                 local is_tv = (disk_cached.season_ep and disk_cached.season_ep ~= '')
                 local search_type = is_tv and 'tv' or 'movie'
-                fetch_tmdb_logo(search_type, disk_cached.show_id, function(logos_tbl)
+                fetch_tmdb_logo(search_type, disk_cached.show_id, function(logos_tbl, is_bd)
                     if logos_tbl then
                         disk_cached.logos = logos_tbl
                         local def_logo = logos_tbl[2] or logos_tbl[1]
                         disk_cached.bgra_path = def_logo and def_logo.path
                         disk_cached.logo_w = def_logo and def_logo.w
                         disk_cached.logo_h = def_logo and def_logo.h
+                        disk_cached.is_backdrop = (is_bd == true)
                         save_meta_to_disk(cache_key, disk_cached)
                         if ss_active then render_screensaver(ss_alpha) end
                     end
@@ -1455,7 +1391,7 @@ local function fetch_tmdb_data(force_refresh)
                 tmdb_current = result
                 if ss_active then render_screensaver(ss_alpha) end
 
-                fetch_tmdb_logo('movie', show_id, function(logos_tbl)
+                fetch_tmdb_logo('movie', show_id, function(logos_tbl, is_bd)
                     tmdb_fetching = false
                     if logos_tbl then
                         result.logos = logos_tbl
@@ -1463,6 +1399,7 @@ local function fetch_tmdb_data(force_refresh)
                         result.bgra_path = def_logo and def_logo.path
                         result.logo_w = def_logo and def_logo.w
                         result.logo_h = def_logo and def_logo.h
+                        result.is_backdrop = (is_bd == true)
                         if ss_active then render_screensaver(ss_alpha) end
                     end
                     save_meta_to_disk(cache_key, result)
@@ -1547,7 +1484,7 @@ local function fetch_tmdb_data(force_refresh)
                 tmdb_current = result
                 if ss_active then render_screensaver(ss_alpha) end
 
-                fetch_tmdb_logo('tv', show_id, function(logos_tbl)
+                fetch_tmdb_logo('tv', show_id, function(logos_tbl, is_bd)
                     tmdb_fetching = false
                     if logos_tbl then
                         result.logos = logos_tbl
@@ -1555,6 +1492,7 @@ local function fetch_tmdb_data(force_refresh)
                         result.bgra_path = def_logo and def_logo.path
                         result.logo_w = def_logo and def_logo.w
                         result.logo_h = def_logo and def_logo.h
+                        result.is_backdrop = (is_bd == true)
                         if ss_active then render_screensaver(ss_alpha) end
                     end
                     save_meta_to_disk(cache_key, result)

@@ -27,9 +27,10 @@ function M.mkdir_p(dir)
     if not dir or dir == '' then return end
     if mp and mp.command_native_async then
         if is_windows then
+            local win_dir = dir:gsub('/', '\\'):gsub('\\+$', '')
             mp.command_native_async({
                 name = 'subprocess',
-                args = {'cmd.exe', '/c', 'if not exist "' .. dir .. '" mkdir "' .. dir .. '"'},
+                args = {'cmd.exe', '/d', '/c', 'if not exist "' .. win_dir .. '" mkdir "' .. win_dir .. '"'},
             }, function() end)
         else
             mp.command_native_async({
