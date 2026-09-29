@@ -159,6 +159,18 @@ mp.add_key_binding(nil, 'menu-sub-config', function()
     end
 end)
 
+mp.add_key_binding(nil, 'sub-scale-up', function()
+    if subtitle and subtitle.add_sub_scale then subtitle.add_sub_scale(0.05) end
+end)
+
+mp.add_key_binding(nil, 'sub-scale-down', function()
+    if subtitle and subtitle.add_sub_scale then subtitle.add_sub_scale(-0.05) end
+end)
+
+mp.add_key_binding(nil, 'sub-scale-reset', function()
+    if subtitle and subtitle.reset_sub_scale then subtitle.reset_sub_scale() end
+end)
+
 mp.add_key_binding(nil, 'menu-tags', function()
     if menu.is_active() and state.menu_active == 'tags' then
         menu.menu_close()

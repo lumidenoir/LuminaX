@@ -15,8 +15,11 @@ local current_sub_text = ''
 local live_preview_active = false
 local config_file_path = nil
 
+local current_sub_scale = 1.0
+local mpv_conf_sub_font_size = 26
+
 -- ────────────────────────────────────────────────────────────────────────────
--- 8 Industry-Standard Subtitle Presets
+-- 8 Industry-Standard Subtitle Presets (Sleek & Proportional Modern Typographies)
 -- ────────────────────────────────────────────────────────────────────────────
 local PRESETS = {
     apple_tv = {
@@ -25,25 +28,25 @@ local PRESETS = {
         icon          = '',
         desc          = 'Translucent frosted pill with refined spatial glass aesthetics',
         font_name     = 'Inter, SF Pro Text, -apple-system, sans-serif',
-        font_size     = 34,
+        font_size     = 24,           -- Sleek modern proportional size
         font_color    = 'FFFFFF',
         bold          = false,
         box_enabled   = true,
-        box_mode      = 'unified',      -- single capsule enclosing all lines
+        box_mode      = 'unified',     -- single capsule enclosing all lines
         box_color     = '000000',
-        box_opacity   = 0.68,        -- ~70% allows background video motion to seep through
-        box_radius    = 16,           -- smooth organic pill rounding
-        glass_rim     = true,          -- subtle white highlight rim (1px, ~15% alpha)
+        box_opacity   = 0.68,         -- ~70% allows background video motion to seep through
+        box_radius    = 14,           -- smooth organic pill rounding
+        glass_rim     = true,         -- subtle white highlight rim (1px, ~15% alpha)
         rim_color     = 'FFFFFF',
-        rim_alpha     = 'D0',          -- ASS hex alpha (D0 = ~18% visibility)
+        rim_alpha     = 'D0',         -- ASS hex alpha (D0 = ~18% visibility)
         border_size   = 0,
         border_color  = '000000',
         shadow_offset = 0,
         shadow_color  = '000000',
-        padding_x     = 22,
-        padding_y     = 12,
-        line_spacing  = 6,
-        bottom_margin = 38,
+        padding_x     = 18,
+        padding_y     = 7,
+        line_spacing  = 4,
+        bottom_margin = 26,
     },
     netflix_box = {
         id            = 'netflix_box',
@@ -51,40 +54,14 @@ local PRESETS = {
         icon          = '🎬',
         desc          = 'Clean dark pill with compact line spacing and balanced contrast',
         font_name     = 'Netflix Sans, Roboto, Arial, sans-serif',
-        font_size     = 35,
+        font_size     = 24,
         font_color    = 'FFFFFF',
         bold          = false,
         box_enabled   = true,
-        box_mode      = 'per_line',     -- individual rounded boxes per line
+        box_mode      = 'per_line',    -- individual rounded boxes per line
         box_color     = '080808',
         box_opacity   = 0.78,
-        box_radius    = 8,
-        glass_rim     = false,
-        rim_color     = 'FFFFFF',
-        rim_alpha     = 'D0',
-        border_size   = 0,
-        border_color  = '000000',
-        shadow_offset = 0,
-        shadow_color  = '000000',
-        padding_x     = 16,
-        padding_y     = 9,
-        line_spacing  = 4,
-        bottom_margin = 34,
-    },
-    youtube_cc = {
-        id            = 'youtube_cc',
-        name          = 'YouTube Studio CC',
-        icon          = '▶',
-        desc          = 'Compact per-line pills hugging text tightly with small radius',
-        font_name     = 'Roboto, Arial, sans-serif',
-        font_size     = 32,
-        font_color    = 'FFFFFF',
-        bold          = true,
-        box_enabled   = true,
-        box_mode      = 'per_line',
-        box_color     = '000000',
-        box_opacity   = 0.82,
-        box_radius    = 6,
+        box_radius    = 7,
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
@@ -93,9 +70,35 @@ local PRESETS = {
         shadow_offset = 0,
         shadow_color  = '000000',
         padding_x     = 14,
-        padding_y     = 7,
+        padding_y     = 6,
         line_spacing  = 3,
-        bottom_margin = 32,
+        bottom_margin = 24,
+    },
+    youtube_cc = {
+        id            = 'youtube_cc',
+        name          = 'YouTube Studio CC',
+        icon          = '▶',
+        desc          = 'Compact per-line pills hugging text tightly with small radius',
+        font_name     = 'Roboto, Arial, sans-serif',
+        font_size     = 22,
+        font_color    = 'FFFFFF',
+        bold          = true,
+        box_enabled   = true,
+        box_mode      = 'per_line',
+        box_color     = '000000',
+        box_opacity   = 0.82,
+        box_radius    = 5,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 0,
+        shadow_color  = '000000',
+        padding_x     = 12,
+        padding_y     = 5,
+        line_spacing  = 3,
+        bottom_margin = 22,
     },
     cinema_gold = {
         id            = 'cinema_gold',
@@ -103,14 +106,14 @@ local PRESETS = {
         icon          = '🍿',
         desc          = 'Soft cinema warm yellow on a subtle dark pill for dark-room viewing',
         font_name     = 'Futura, Gill Sans, Trebuchet MS, sans-serif',
-        font_size     = 36,
-        font_color    = 'FFE675',      -- warm pale amber/gold
+        font_size     = 25,
+        font_color    = 'FFE675',     -- warm pale amber/gold
         bold          = false,
         box_enabled   = true,
         box_mode      = 'unified',
         box_color     = '0A0A0A',
-        box_opacity   = 0.60,         -- lighter tint to feel more organic on film grain
-        box_radius    = 12,
+        box_opacity   = 0.60,        -- lighter tint to feel more organic on film grain
+        box_radius    = 10,
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
@@ -118,10 +121,10 @@ local PRESETS = {
         border_color  = '000000',
         shadow_offset = 1.0,
         shadow_color  = '000000',
-        padding_x     = 20,
-        padding_y     = 10,
-        line_spacing  = 6,
-        bottom_margin = 42,
+        padding_x     = 18,
+        padding_y     = 7,
+        line_spacing  = 4,
+        bottom_margin = 28,
     },
     criterion_minimal = {
         id            = 'criterion_minimal',
@@ -129,7 +132,7 @@ local PRESETS = {
         icon          = '⚪',
         desc          = 'Boxless pure typography with soft drop-shadow depth',
         font_name     = 'Gill Sans, Futura, Inter, sans-serif',
-        font_size     = 36,
+        font_size     = 25,
         font_color    = 'F7F7F7',
         bold          = false,
         box_enabled   = false,
@@ -140,14 +143,14 @@ local PRESETS = {
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
-        border_size   = 1.2,
+        border_size   = 1.0,
         border_color  = '141414',
-        shadow_offset = 1.8,
+        shadow_offset = 1.5,
         shadow_color  = '000000',
-        padding_x     = 20,
-        padding_y     = 10,
-        line_spacing  = 6,
-        bottom_margin = 36,
+        padding_x     = 16,
+        padding_y     = 6,
+        line_spacing  = 4,
+        bottom_margin = 24,
     },
     anime_outline = {
         id            = 'anime_outline',
@@ -155,7 +158,7 @@ local PRESETS = {
         icon          = '⚔️',
         desc          = 'Bold white text with thick pitch-black contour; boxless',
         font_name     = 'Trebuchet MS, Montserrat, Arial, sans-serif',
-        font_size     = 38,
+        font_size     = 26,
         font_color    = 'FFFFFF',
         bold          = true,
         box_enabled   = false,
@@ -166,14 +169,14 @@ local PRESETS = {
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
-        border_size   = 3.2,
+        border_size   = 2.8,
         border_color  = '000000',
         shadow_offset = 1.0,
         shadow_color  = '000000',
-        padding_x     = 20,
-        padding_y     = 10,
-        line_spacing  = 4,
-        bottom_margin = 32,
+        padding_x     = 16,
+        padding_y     = 6,
+        line_spacing  = 3,
+        bottom_margin = 22,
     },
     bbc_accessible = {
         id            = 'bbc_accessible',
@@ -181,14 +184,14 @@ local PRESETS = {
         icon          = '👁',
         desc          = 'High-contrast cadmium yellow on 95% solid black capsule (WCAG AAA)',
         font_name     = 'Atkinson Hyperlegible, Arial, sans-serif',
-        font_size     = 38,
-        font_color    = 'FFFF00',      -- pure high-visibility yellow
+        font_size     = 28,
+        font_color    = 'FFFF00',     -- pure high-visibility yellow
         bold          = true,
         box_enabled   = true,
         box_mode      = 'per_line',
         box_color     = '000000',
-        box_opacity   = 0.94,         -- almost solid
-        box_radius    = 8,
+        box_opacity   = 0.94,        -- almost solid
+        box_radius    = 7,
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
@@ -196,10 +199,10 @@ local PRESETS = {
         border_color  = '000000',
         shadow_offset = 0,
         shadow_color  = '000000',
-        padding_x     = 18,
-        padding_y     = 10,
-        line_spacing  = 6,
-        bottom_margin = 38,
+        padding_x     = 16,
+        padding_y     = 7,
+        line_spacing  = 4,
+        bottom_margin = 26,
     },
     disney_slate = {
         id            = 'disney_slate',
@@ -207,25 +210,25 @@ local PRESETS = {
         icon          = '✨',
         desc          = 'Deep midnight navy glass capsule for a softer contrast transition',
         font_name     = 'Avenir, Inter, Helvetica Neue, sans-serif',
-        font_size     = 34,
+        font_size     = 24,
         font_color    = 'FFFFFF',
         bold          = false,
         box_enabled   = true,
         box_mode      = 'unified',
-        box_color     = '0B101E',        -- deep midnight navy
+        box_color     = '0B101E',     -- deep midnight navy
         box_opacity   = 0.75,
-        box_radius    = 12,
+        box_radius    = 10,
         glass_rim     = true,
-        rim_color     = '7090C0',        -- muted slate-blue hairline
+        rim_color     = '7090C0',     -- muted slate-blue hairline
         rim_alpha     = 'E0',
         border_size   = 0,
         border_color  = '000000',
         shadow_offset = 0,
         shadow_color  = '000000',
-        padding_x     = 20,
-        padding_y     = 11,
-        line_spacing  = 5,
-        bottom_margin = 36,
+        padding_x     = 18,
+        padding_y     = 7,
+        line_spacing  = 4,
+        bottom_margin = 26,
     },
 }
 
@@ -301,7 +304,7 @@ end
 
 -- Font Metric Character Width Estimation
 local function estimate_char_width(byte, fs, is_bold)
-    local bold_factor = is_bold and 1.06 or 1.0
+    local bold_factor = is_bold and 1.05 or 1.0
     -- Multi-byte UTF-8 character (e.g. CJK, emoji)
     if byte >= 0xC0 then
         return fs * 0.95 * bold_factor
@@ -310,18 +313,18 @@ local function estimate_char_width(byte, fs, is_bold)
     if ch:match('[WwMm@]') then
         return fs * 0.72 * bold_factor
     elseif ch:match('[A-Z]') then
-        return fs * 0.60 * bold_factor
+        return fs * 0.58 * bold_factor
     elseif ch:match('[a-z0-9]') then
         if ch:match('[iljtfr]') then
-            return fs * 0.32 * bold_factor
+            return fs * 0.30 * bold_factor
         end
-        return fs * 0.50 * bold_factor
+        return fs * 0.48 * bold_factor
     elseif ch:match('[%s]') then
         return fs * 0.28
     elseif ch:match('[,%.!;:|\'"%-_]') then
-        return fs * 0.26
+        return fs * 0.25
     else
-        return fs * 0.45 * bold_factor
+        return fs * 0.44 * bold_factor
     end
 end
 
@@ -424,7 +427,7 @@ function M.apply_config(skip_save)
         pcall(mp.set_property, 'sub-border-size', tostring(config.border_size or 0))
         pcall(mp.set_property, 'sub-shadow-offset', tostring(config.shadow_offset or 0))
         pcall(mp.set_property, 'sub-shadow-color', '#' .. (config.shadow_color or '000000') .. 'A0')
-        pcall(mp.set_property, 'sub-margin-y', tostring(config.bottom_margin or 36))
+        pcall(mp.set_property, 'sub-margin-y', tostring(config.bottom_margin or 26))
     end
 
     if ctx_ref.request_tick then ctx_ref.request_tick() end
@@ -441,7 +444,7 @@ function M.apply_preset(preset_id)
         end
     end
     M.apply_config()
-    mp.osd_message(string.format('%s  Preset Applied: %s', p.icon or '✓', p.name), 2.5)
+    mp.osd_message(string.format('%s  Preset: %s (%dpt)', p.icon or '✓', p.name, config.font_size), 2.0)
 end
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -466,17 +469,15 @@ function M.update_overlay()
         return
     end
 
-    local w, h = 1280, 720
-    if ctx_ref.utils and ctx_ref.utils.get_canvas_size then
-        w, h = ctx_ref.utils.get_canvas_size(ctx_ref.osc_param)
-    else
-        local ow, oh = mp.get_osd_size()
-        w = ow or 1280; h = oh or 720
-    end
+    -- Reference canvas: 720p virtual height for perfect ASS coordinate consistency
+    local ow, oh = mp.get_osd_size()
+    local aspect = (ow and oh and oh > 0) and (ow / oh) or (16 / 9)
+    local canvas_h = 720
+    local canvas_w = math.floor(720 * aspect + 0.5)
 
-    -- Dynamic Font Scaling: reference 720p canvas
-    local scale = math.max(0.5, h / 720)
-    local fs    = math.floor((config.font_size or 34) * scale + 0.5)
+    -- Dynamic Font Scaling based on user sub-scale multiplier
+    local scale_factor = current_sub_scale or 1.0
+    local fs    = math.floor((config.font_size or 24) * scale_factor + 0.5)
     local is_bold = config.bold or false
 
     -- Process subtitle text lines
@@ -494,11 +495,11 @@ function M.update_overlay()
         return
     end
 
-    local line_sp  = math.floor((config.line_spacing or 6) * scale + 0.5)
-    local line_h   = math.ceil(fs * 1.28 + line_sp)
-    local pad_x    = math.floor((config.padding_x or 20) * scale + 0.5)
-    local pad_y    = math.floor((config.padding_y or 10) * scale + 0.5)
-    local margin_y = math.floor((config.bottom_margin or 38) * scale + 0.5)
+    local line_sp  = math.floor((config.line_spacing or 4) * scale_factor + 0.5)
+    local line_h   = math.ceil(fs * 1.18 + line_sp)
+    local pad_x    = math.floor((config.padding_x or 18) * scale_factor + 0.5)
+    local pad_y    = math.floor((config.padding_y or 7) * scale_factor + 0.5)
+    local margin_y = math.floor((config.bottom_margin or 26) * scale_factor + 0.5)
 
     local line_widths = {}
     local max_lw = 0
@@ -518,28 +519,27 @@ function M.update_overlay()
     local box_a     = opacity_to_ass_alpha(config.box_opacity or 0.70)
     local rim_bgr   = rgb_to_ass(config.rim_color or 'FFFFFF')
     local rim_a     = config.rim_alpha or 'D0'
-    local rim_w     = config.glass_rim and math.max(0.8, 1.0 * scale) or 0
+    local rim_w     = config.glass_rim and 1.0 or 0
 
     local bord_bgr  = rgb_to_ass(config.border_color or '000000')
-    local bord_w    = (config.border_size and config.border_size > 0) and math.max(0.5, config.border_size * scale) or 0
+    local bord_w    = (config.border_size and config.border_size > 0) and (config.border_size * scale_factor) or 0
     local shad_bgr  = rgb_to_ass(config.shadow_color or '000000')
-    local shad_off  = (config.shadow_offset and config.shadow_offset > 0) and math.max(0.5, config.shadow_offset * scale) or 0
+    local shad_off  = (config.shadow_offset and config.shadow_offset > 0) and (config.shadow_offset * scale_factor) or 0
 
-    local cx        = math.floor(w / 2)
+    local cx        = math.floor(canvas_w / 2)
     local font_face = get_primary_font(config.font_name)
 
-    -- Base corner radius scaled
     local raw_r     = config.box_radius or 14
-    local scaled_r  = (raw_r == -1) and -1 or math.floor(raw_r * scale + 0.5)
+    local scaled_r  = (raw_r == -1) and -1 or math.floor(raw_r * scale_factor + 0.5)
 
     if config.box_enabled and config.box_mode == 'per_line' then
         -- ────────────────────────────────────────────────────────────────────
         -- 1. Per-Line Pill Rendering (YouTube Studio / Netflix / BBC CC)
         -- ────────────────────────────────────────────────────────────────────
-        local gap = math.max(4, math.floor(line_sp * 0.8))
+        local gap = math.max(3, math.floor(line_sp * 0.7))
         local line_box_h = line_h + pad_y * 2
         local total_h = (total_lines * line_box_h) + ((total_lines - 1) * gap)
-        local start_y = h - margin_y - total_h
+        local start_y = canvas_h - margin_y - total_h
 
         for i, line in ipairs(raw_lines) do
             local lw   = line_widths[i] or max_lw
@@ -566,7 +566,7 @@ function M.update_overlay()
             ass:new_event()
             ass:pos(cx, text_cy)
             ass:an(5)
-            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\q2}',
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\fsp0.5\\q2}',
                 font_face, fs, is_bold and '\\b700' or '\\b400',
                 txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
             ass:append(line)
@@ -580,7 +580,7 @@ function M.update_overlay()
         local pill_h = (total_lines * line_h) + pad_y * 2
         local r      = (scaled_r == -1) and math.floor(pill_h / 2) or math.min(scaled_r, math.floor(pill_h / 2))
 
-        local y1     = h - margin_y
+        local y1     = canvas_h - margin_y
         local y0     = y1 - pill_h
         local x0     = cx - math.floor(pill_w / 2)
         local x1     = cx + math.floor(pill_w / 2)
@@ -601,7 +601,7 @@ function M.update_overlay()
             ass:new_event()
             ass:pos(cx, text_cy)
             ass:an(5)
-            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\q2}',
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\fsp0.5\\q2}',
                 font_face, fs, is_bold and '\\b700' or '\\b400',
                 txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
             ass:append(line)
@@ -612,7 +612,7 @@ function M.update_overlay()
         -- 3. Boxless Typography (Anime Fansub / Criterion Float)
         -- ────────────────────────────────────────────────────────────────────
         local total_h = total_lines * line_h
-        local y1      = h - margin_y
+        local y1      = canvas_h - margin_y
         local y0      = y1 - total_h
 
         for i, line in ipairs(raw_lines) do
@@ -620,17 +620,39 @@ function M.update_overlay()
             ass:new_event()
             ass:pos(cx, text_cy)
             ass:an(5)
-            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H90&\\q2}',
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H90&\\fsp0.5\\q2}',
                 font_face, fs, is_bold and '\\b700' or '\\b400',
                 txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
             ass:append(line)
         end
     end
 
-    overlay.res_x = w
-    overlay.res_y = h
+    overlay.res_x = canvas_w
+    overlay.res_y = canvas_h
     overlay.data  = ass.text
     overlay:update()
+end
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- Subtitle Scale Adjustment & Keybinding Helpers
+-- ────────────────────────────────────────────────────────────────────────────
+
+function M.add_sub_scale(delta)
+    local cur = mp.get_property_number('sub-scale', 1.0)
+    local new_val = math.max(0.4, math.min(2.5, cur + delta))
+    new_val = math.floor(new_val * 100 + 0.5) / 100
+    pcall(mp.set_property_number, 'sub-scale', new_val)
+    current_sub_scale = new_val
+    M.update_overlay()
+    local eff_fs = math.floor((config.font_size or 24) * current_sub_scale + 0.5)
+    mp.osd_message(string.format('Subtitle Size: %dpt (%d%%)', eff_fs, math.floor(new_val * 100)), 1.5)
+end
+
+function M.reset_sub_scale()
+    pcall(mp.set_property_number, 'sub-scale', 1.0)
+    current_sub_scale = 1.0
+    M.update_overlay()
+    mp.osd_message(string.format('Subtitle Size: %dpt (100%%)', config.font_size or 24), 1.5)
 end
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -640,6 +662,14 @@ end
 function M.init(ctx)
     ctx_ref = ctx or {}
     overlay = mp.create_osd_overlay('ass-events')
+
+    -- Read configured font size from mpv.conf if set
+    local cfg_fs = mp.get_property_number('sub-font-size')
+    if cfg_fs and cfg_fs > 0 then
+        mpv_conf_sub_font_size = cfg_fs
+    end
+
+    current_sub_scale = mp.get_property_number('sub-scale', 1.0)
 
     load_saved_config()
 
@@ -659,6 +689,19 @@ function M.init(ctx)
         M.update_overlay()
     end)
 
+    -- Observe MPV's sub-scale keybindings (Shift+G / Shift+F, Ctrl+= / Ctrl+-)
+    mp.observe_property('sub-scale', 'number', function(_, s)
+        current_sub_scale = s or 1.0
+        M.update_overlay()
+    end)
+
+    -- Observe mpv.conf sub-font-size changes
+    mp.observe_property('sub-font-size', 'number', function(_, fs)
+        if fs and fs > 0 then
+            mpv_conf_sub_font_size = fs
+        end
+    end)
+
     M.apply_config(true)
 end
 
@@ -668,6 +711,14 @@ end
 
 function M.get_presets()
     return PRESETS
+end
+
+function M.get_current_scale()
+    return current_sub_scale
+end
+
+function M.get_mpv_conf_font_size()
+    return mpv_conf_sub_font_size
 end
 
 function M.set_live_preview(active)
@@ -684,7 +735,7 @@ function M.get_menu_title(menu_type)
         sub_config  = 'SUBTITLE CONFIGURATION',
         sub_presets = 'INDUSTRY STYLE PRESETS',
         sub_box     = 'ROUNDED PILL & BOX STYLE',
-        sub_text    = 'TEXT COLOR & TYPOGRAPHY',
+        sub_text    = 'TEXT SIZE, SCALE & COLOR',
         sub_border  = 'BORDER & SHADOW STYLING',
         sub_layout  = 'POSITION & SPACING',
     }
@@ -693,6 +744,7 @@ end
 
 function M.get_menu_items(menu_type)
     local items = {}
+    local eff_fs = math.floor((config.font_size or 24) * current_sub_scale + 0.5)
 
     if menu_type == 'sub_config' then
         local p_info = PRESETS[config.preset]
@@ -718,8 +770,8 @@ function M.get_menu_items(menu_type)
             index = #items + 1
         }
         items[#items + 1] = {
-            label = '🎨  Text Color & Typography  ▸',
-            sublabel = string.format('%s  •  %dpt  •  #%s', get_primary_font(config.font_name), config.font_size, config.font_color),
+            label = '🎨  Text Size, Scale & Color  ▸',
+            sublabel = string.format('%s  •  %dpt (Scale: %d%%)  •  #%s', get_primary_font(config.font_name), eff_fs, math.floor(current_sub_scale * 100), config.font_color),
             action = 'nav_menu',
             target = 'sub_text',
             index = #items + 1
@@ -733,7 +785,7 @@ function M.get_menu_items(menu_type)
         }
         items[#items + 1] = {
             label = '📐  Position & Line Spacing  ▸',
-            sublabel = string.format('Bottom Margin: %dpx  •  Line Spacing: %+dpx', config.bottom_margin or 38, config.line_spacing or 6),
+            sublabel = string.format('Bottom Margin: %dpx  •  Line Spacing: %+dpx', config.bottom_margin or 26, config.line_spacing or 4),
             action = 'nav_menu',
             target = 'sub_layout',
             index = #items + 1
@@ -773,7 +825,7 @@ function M.get_menu_items(menu_type)
         for _, id in ipairs(order) do
             local p = PRESETS[id]
             items[#items + 1] = {
-                label = string.format('%s  %s', p.icon or '•', p.name),
+                label = string.format('%s  %s  (%dpt)', p.icon or '•', p.name, p.font_size),
                 sublabel = p.desc,
                 action = 'set_preset',
                 preset_id = id,
@@ -805,10 +857,10 @@ function M.get_menu_items(menu_type)
         }
         local radii = {
             {label = 'Full Capsule (Pill)', val = -1, sub = 'Fully rounded capsule ends'},
-            {label = '16px Corner Radius (Apple TV+)', val = 16, sub = 'Organic smooth spatial curve'},
-            {label = '12px Corner Radius (Disney+)', val = 12, sub = 'Balanced modern TV curvature'},
-            {label = '8px Corner Radius (Netflix)', val = 8, sub = 'Compact modern streaming box'},
-            {label = '6px Corner Radius (YouTube CC)', val = 6, sub = 'Tight badge corner rounding'},
+            {label = '14px Corner Radius (Apple TV+)', val = 14, sub = 'Organic smooth spatial curve'},
+            {label = '10px Corner Radius (Disney+)', val = 10, sub = 'Balanced modern TV curvature'},
+            {label = '7px Corner Radius (Netflix)', val = 7, sub = 'Compact modern streaming box'},
+            {label = '5px Corner Radius (YouTube CC)', val = 5, sub = 'Tight badge corner rounding'},
         }
         for _, r in ipairs(radii) do
             items[#items + 1] = {
@@ -853,6 +905,52 @@ function M.get_menu_items(menu_type)
         }
 
     elseif menu_type == 'sub_text' then
+        -- Scale Keybinding Actions
+        items[#items + 1] = {
+            label = string.format('Scale: %d%% (Effective: %dpt)', math.floor(current_sub_scale * 100), eff_fs),
+            sublabel = 'Keys: Shift+G / Shift+F or Ctrl+= / Ctrl+- to scale dynamically',
+            action = 'none',
+            index = #items + 1
+        }
+        items[#items + 1] = {
+            label = '➕  Increase Subtitle Size (+10%)',
+            sublabel = 'Shortcut: Shift+G or Ctrl+= or Ctrl+Shift+UP',
+            action = 'scale_up',
+            index = #items + 1
+        }
+        items[#items + 1] = {
+            label = '➖  Decrease Subtitle Size (-10%)',
+            sublabel = 'Shortcut: Shift+F or Ctrl+- or Ctrl+Shift+DOWN',
+            action = 'scale_down',
+            index = #items + 1
+        }
+        items[#items + 1] = {
+            label = '↺  Reset Scale to 100%',
+            sublabel = 'Restores 1.0x neutral scale multiplier',
+            action = 'scale_reset',
+            index = #items + 1
+        }
+
+        -- Preset Font Sizes (Compact & Proportional)
+        local sizes = {
+            {label = '20pt (Extra Small)', val = 20, desc = 'Compact for high resolution displays'},
+            {label = '22pt (Small - YouTube CC)', val = 22, desc = 'Tight and minimal'},
+            {label = '24pt (Standard - Apple TV+)', val = 24, desc = 'Ideal modern golden ratio'},
+            {label = '25pt (Medium - Netflix/Cinema)', val = 25, desc = 'Balanced high readability'},
+            {label = '28pt (Large - Accessible)', val = 28, desc = 'Higher visibility without crowding'},
+            {label = string.format('Use mpv.conf Base Size (%dpt)', mpv_conf_sub_font_size), val = mpv_conf_sub_font_size, desc = 'Directly syncs to your mpv.conf sub-font-size'},
+        }
+        for _, s in ipairs(sizes) do
+            items[#items + 1] = {
+                label = 'Size: ' .. s.label,
+                sublabel = s.desc,
+                action = 'set_font_size',
+                val = s.val,
+                current = (config.font_size == s.val),
+                index = #items + 1
+            }
+        end
+
         local colors = {
             {name = 'Pure White', hex = 'FFFFFF', desc = 'Crisp standard white (Apple / Netflix)'},
             {name = 'Theatrical Warm Gold', hex = 'FFE675', desc = 'Cinema 35mm pale amber gold for dark rooms'},
@@ -870,17 +968,7 @@ function M.get_menu_items(menu_type)
                 index = #items + 1
             }
         end
-        local sizes = {32, 34, 35, 36, 38, 44}
-        for _, s in ipairs(sizes) do
-            items[#items + 1] = {
-                label = string.format('Font Size: %dpt %s', s, (s == 34 and '(Apple TV+)' or (s == 35 and '(Netflix)' or ''))),
-                sublabel = 'Adjust dialogue typography scale',
-                action = 'set_font_size',
-                val = s,
-                current = (config.font_size == s),
-                index = #items + 1
-            }
-        end
+
         items[#items + 1] = {
             label = config.bold and 'Font Weight: Bold [ON]' or 'Font Weight: Regular [OFF]',
             sublabel = 'Toggle between regular and bold typeface weight',
@@ -898,9 +986,9 @@ function M.get_menu_items(menu_type)
     elseif menu_type == 'sub_border' then
         local b_sizes = {
             {label = '0.0px (None / Clean Glass)', val = 0.0},
-            {label = '1.2px (Criterion Depth)', val = 1.2},
-            {label = '2.0px (Medium Contour)', val = 2.0},
-            {label = '3.2px (Anime Fansub Stroke)', val = 3.2},
+            {label = '1.0px (Criterion Depth)', val = 1.0},
+            {label = '1.8px (Standard Contour)', val = 1.8},
+            {label = '2.8px (Anime Fansub Stroke)', val = 2.8},
         }
         for _, b in ipairs(b_sizes) do
             items[#items + 1] = {
@@ -915,8 +1003,8 @@ function M.get_menu_items(menu_type)
         local shadows = {
             {label = '0.0px (None / Flat)', val = 0.0},
             {label = '1.0px (Cinema Subtle Shadow)', val = 1.0},
-            {label = '1.8px (Criterion Float Shadow)', val = 1.8},
-            {label = '3.0px (Deep Drop Shadow)', val = 3.0},
+            {label = '1.5px (Criterion Float Shadow)', val = 1.5},
+            {label = '2.5px (Deep Drop Shadow)', val = 2.5},
         }
         for _, s in ipairs(shadows) do
             items[#items + 1] = {
@@ -937,11 +1025,11 @@ function M.get_menu_items(menu_type)
 
     elseif menu_type == 'sub_layout' then
         local margins = {
-            {label = '32px (Anime / YouTube Compact)', val = 32},
-            {label = '34px (Netflix Standard)', val = 34},
-            {label = '36px (Disney+ Midnight)', val = 36},
-            {label = '38px (Apple TV+ / Studio CC)', val = 38},
-            {label = '42px (Cinema Warm Gold)', val = 42},
+            {label = '20px (Ultra Low / Screen Edge)', val = 20},
+            {label = '24px (Netflix Standard)', val = 24},
+            {label = '26px (Apple TV+ Standard)', val = 26},
+            {label = '30px (Elevated)', val = 30},
+            {label = '36px (High / Upper Safe Zone)', val = 36},
         }
         for _, m in ipairs(margins) do
             items[#items + 1] = {
@@ -954,11 +1042,10 @@ function M.get_menu_items(menu_type)
             }
         end
         local spacings = {
-            {label = '3px (YouTube CC Compact)', val = 3},
-            {label = '4px (Netflix Standard)', val = 4},
-            {label = '5px (Disney+ Modern)', val = 5},
-            {label = '6px (Apple TV+ Spatial)', val = 6},
-            {label = '8px (Relaxed Arthouse)', val = 8},
+            {label = '2px (Ultra Compact)', val = 2},
+            {label = '3px (YouTube / Netflix Compact)', val = 3},
+            {label = '4px (Apple TV+ Standard)', val = 4},
+            {label = '6px (Relaxed Arthouse)', val = 6},
         }
         for _, sp in ipairs(spacings) do
             items[#items + 1] = {
@@ -993,6 +1080,15 @@ function M.handle_action(item)
 
     elseif item.action == 'reset_defaults' then
         M.apply_preset('apple_tv')
+
+    elseif item.action == 'scale_up' then
+        M.add_sub_scale(0.10)
+
+    elseif item.action == 'scale_down' then
+        M.add_sub_scale(-0.10)
+
+    elseif item.action == 'scale_reset' then
+        M.reset_sub_scale()
 
     elseif item.action == 'toggle_box_enabled' then
         config.box_enabled = not config.box_enabled
@@ -1034,7 +1130,8 @@ function M.handle_action(item)
         config.font_size = item.val
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message(string.format('✓ Font Size: %dpt', item.val), 2)
+        local eff_fs = math.floor(item.val * current_sub_scale + 0.5)
+        mp.osd_message(string.format('✓ Font Size: %dpt', eff_fs), 2)
 
     elseif item.action == 'toggle_bold' then
         config.bold = not config.bold
