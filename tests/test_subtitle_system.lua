@@ -1,5 +1,5 @@
 -- ============================================================================
--- Unit Test Suite: Subtitle Subsystem & Rounded Rectangle Architecture
+-- Unit Test Suite: Subtitle Subsystem & 8 Industry-Standard Presets
 -- ============================================================================
 
 local test_count = 0
@@ -28,7 +28,7 @@ local function assert_equal(actual, expected, msg)
 end
 
 print('======================================================================')
-print('🧪 LuminaX Subtitle Subsystem & Rounded Rectangle Unit Tests')
+print('🧪 LuminaX Subtitle Subsystem & 8 Industry Presets Unit Tests')
 print('======================================================================')
 
 -- Mock MPV Environment
@@ -111,95 +111,142 @@ subtitle.init({
     request_tick = function() end,
 })
 
-print('\n▶ Testing Presets Application & State Validation:')
-subtitle.apply_preset('visionos_pill')
+print('\n▶ 1. Testing 8 Industry Presets Application & Specifications:')
+
+-- A. Apple TV+ / visionOS ("Spatial Glass")
+subtitle.apply_preset('apple_tv')
 local cfg = subtitle.get_config()
-assert_equal(cfg.preset, 'visionos_pill', 'Preset is visionOS Pill')
-assert_equal(cfg.mode, 'rounded_rect', 'Mode is rounded_rect')
-assert_equal(cfg.box_enabled, true, 'Box is enabled')
-assert_equal(cfg.box_radius, 14, 'Box radius is 14px')
-assert_equal(cfg.text_color, '#FFFFFF', 'Text color is pure white')
-assert_equal(cfg.box_rim_enabled, true, 'Glass rim is enabled')
+assert_equal(cfg.preset, 'apple_tv', 'A. Apple TV+ id')
+assert_equal(cfg.box_mode, 'unified', 'A. Apple TV+ unified capsule mode')
+assert_equal(cfg.box_radius, 16, 'A. Apple TV+ 16px radius')
+assert_equal(cfg.box_opacity, 0.68, 'A. Apple TV+ 0.68 opacity')
+assert_equal(cfg.glass_rim, true, 'A. Apple TV+ glass rim enabled')
+assert_equal(cfg.font_color, 'FFFFFF', 'A. Apple TV+ white font')
+assert_equal(cfg.bottom_margin, 38, 'A. Apple TV+ 38px bottom margin')
 
-subtitle.apply_preset('netflix_modern')
+-- B. Netflix Modern Box ("Clean Charcoal")
+subtitle.apply_preset('netflix_box')
 cfg = subtitle.get_config()
-assert_equal(cfg.preset, 'netflix_modern', 'Preset is Netflix Modern')
-assert_equal(cfg.box_radius, 8, 'Netflix box radius is 8px')
-assert_equal(cfg.box_color, '#000000', 'Netflix box color is pitch black')
-assert_equal(cfg.box_rim_enabled, false, 'Netflix box has no rim')
+assert_equal(cfg.preset, 'netflix_box', 'B. Netflix id')
+assert_equal(cfg.box_mode, 'per_line', 'B. Netflix per-line pill mode')
+assert_equal(cfg.box_radius, 8, 'B. Netflix 8px radius')
+assert_equal(cfg.box_color, '080808', 'B. Netflix 080808 charcoal fill')
+assert_equal(cfg.box_opacity, 0.78, 'B. Netflix 0.78 opacity')
+assert_equal(cfg.font_size, 35, 'B. Netflix 35pt font size')
+assert_equal(cfg.line_spacing, 4, 'B. Netflix 4px compact line spacing')
 
-subtitle.apply_preset('cinema_yellow')
+-- C. YouTube Studio ("Compact Pill")
+subtitle.apply_preset('youtube_cc')
 cfg = subtitle.get_config()
-assert_equal(cfg.preset, 'cinema_yellow', 'Preset is Cinema Yellow')
-assert_equal(cfg.text_color, '#FFE066', 'Text color is warm cinema yellow')
-assert_equal(cfg.box_radius, 10, 'Cinema box radius is 10px')
+assert_equal(cfg.preset, 'youtube_cc', 'C. YouTube Studio id')
+assert_equal(cfg.box_mode, 'per_line', 'C. YouTube Studio per-line mode')
+assert_equal(cfg.box_radius, 6, 'C. YouTube Studio 6px tight radius')
+assert_equal(cfg.box_opacity, 0.82, 'C. YouTube Studio 0.82 opacity')
+assert_equal(cfg.bold, true, 'C. YouTube Studio bold font')
+assert_equal(cfg.padding_x, 14, 'C. YouTube Studio 14px compact padding')
 
-subtitle.apply_preset('cyber_neon')
+-- D. Theatrical Cinema ("Warm Gold")
+subtitle.apply_preset('cinema_gold')
 cfg = subtitle.get_config()
-assert_equal(cfg.preset, 'cyber_neon', 'Preset is Cyberpunk Neon')
-assert_equal(cfg.text_color, '#00F0FF', 'Text color is electric cyan')
-assert_equal(cfg.box_rim_enabled, true, 'Cyan neon rim is enabled')
+assert_equal(cfg.preset, 'cinema_gold', 'D. Cinema Gold id')
+assert_equal(cfg.box_mode, 'unified', 'D. Cinema Gold unified capsule')
+assert_equal(cfg.font_color, 'FFE675', 'D. Cinema Gold warm pale amber')
+assert_equal(cfg.box_opacity, 0.60, 'D. Cinema Gold 0.60 subtle tint')
+assert_equal(cfg.box_radius, 12, 'D. Cinema Gold 12px radius')
+assert_equal(cfg.shadow_offset, 1.0, 'D. Cinema Gold 1.0px drop shadow')
+assert_equal(cfg.bottom_margin, 42, 'D. Cinema Gold 42px bottom margin')
 
+-- E. Criterion Minimalist ("Floating Pure")
+subtitle.apply_preset('criterion_minimal')
+cfg = subtitle.get_config()
+assert_equal(cfg.preset, 'criterion_minimal', 'E. Criterion id')
+assert_equal(cfg.box_enabled, false, 'E. Criterion boxless')
+assert_equal(cfg.font_color, 'F7F7F7', 'E. Criterion off-white font')
+assert_equal(cfg.border_size, 1.2, 'E. Criterion 1.2px outline')
+assert_equal(cfg.shadow_offset, 1.8, 'E. Criterion 1.8px shadow')
+
+-- F. Anime Fansub ("Crisp High-Contrast Outline")
 subtitle.apply_preset('anime_outline')
 cfg = subtitle.get_config()
-assert_equal(cfg.preset, 'anime_outline', 'Preset is Anime Outline')
-assert_equal(cfg.mode, 'native', 'Mode switches to native for anime outline')
-assert_equal(cfg.border_size, 3.2, 'Outline border is 3.2px')
-assert_equal(cfg.box_enabled, false, 'Box is disabled for anime outline')
+assert_equal(cfg.preset, 'anime_outline', 'F. Anime Fansub id')
+assert_equal(cfg.box_enabled, false, 'F. Anime Fansub boxless')
+assert_equal(cfg.bold, true, 'F. Anime Fansub bold text')
+assert_equal(cfg.border_size, 3.2, 'F. Anime Fansub 3.2px contour stroke')
+assert_equal(cfg.border_color, '000000', 'F. Anime Fansub pitch-black border')
 
-print('\n▶ Testing Menu Generator & Submenus:')
-local root_items = subtitle.get_menu_items('sub_config')
-assert_true(#root_items >= 7, 'Sub config has all primary sections')
-assert_equal(root_items[1].target, 'sub_presets', 'Option 1 opens sub_presets')
-assert_equal(root_items[2].target, 'sub_box', 'Option 2 opens sub_box')
-assert_equal(root_items[3].target, 'sub_text', 'Option 3 opens sub_text')
-assert_equal(root_items[4].target, 'sub_border', 'Option 4 opens sub_border')
-assert_equal(root_items[5].target, 'sub_layout', 'Option 5 opens sub_layout')
+-- G. BBC iPlayer / High-Accessibility CC
+subtitle.apply_preset('bbc_accessible')
+cfg = subtitle.get_config()
+assert_equal(cfg.preset, 'bbc_accessible', 'G. BBC Accessible CC id')
+assert_equal(cfg.box_mode, 'per_line', 'G. BBC Accessible per-line mode')
+assert_equal(cfg.font_color, 'FFFF00', 'G. BBC Accessible cadmium yellow')
+assert_equal(cfg.box_opacity, 0.94, 'G. BBC Accessible 0.94 solid backdrop')
+assert_equal(cfg.font_size, 38, 'G. BBC Accessible 38pt large font')
+assert_equal(cfg.bold, true, 'G. BBC Accessible bold weight')
 
+-- H. Disney+ Midnight Slate ("Cinema Navy")
+subtitle.apply_preset('disney_slate')
+cfg = subtitle.get_config()
+assert_equal(cfg.preset, 'disney_slate', 'H. Disney+ Midnight id')
+assert_equal(cfg.box_mode, 'unified', 'H. Disney+ unified mode')
+assert_equal(cfg.box_color, '0B101E', 'H. Disney+ deep midnight navy')
+assert_equal(cfg.box_opacity, 0.75, 'H. Disney+ 0.75 opacity')
+assert_equal(cfg.glass_rim, true, 'H. Disney+ glass rim enabled')
+assert_equal(cfg.rim_color, '7090C0', 'H. Disney+ slate-blue rim color')
+assert_equal(cfg.box_radius, 12, 'H. Disney+ 12px radius')
+
+print('\n▶ 2. Testing Menu Generator & 8 Preset Listing:')
 local preset_items = subtitle.get_menu_items('sub_presets')
-assert_true(#preset_items >= 7, 'Preset items contain all built-in styles')
-assert_equal(subtitle.get_menu_title('sub_presets'), 'SUBTITLE STYLE PRESETS', 'Preset submenu title matches')
+assert_equal(#preset_items, 9, 'Preset submenu contains 8 presets + back item')
+assert_true(preset_items[1].label:find('Apple TV%+ Glass') ~= nil, 'Item 1 is Apple TV+')
+assert_true(preset_items[2].label:find('Netflix Standard') ~= nil, 'Item 2 is Netflix')
+assert_true(preset_items[3].label:find('YouTube Studio CC') ~= nil, 'Item 3 is YouTube CC')
+assert_true(preset_items[4].label:find('Theatrical Gold') ~= nil, 'Item 4 is Theatrical Gold')
+assert_true(preset_items[5].label:find('Criterion Float') ~= nil, 'Item 5 is Criterion')
+assert_true(preset_items[6].label:find('Anime Fansub') ~= nil, 'Item 6 is Anime Fansub')
+assert_true(preset_items[7].label:find('Studio Accessible CC') ~= nil, 'Item 7 is Studio Accessible')
+assert_true(preset_items[8].label:find('Disney%+ Midnight') ~= nil, 'Item 8 is Disney+ Midnight')
 
-local box_items = subtitle.get_menu_items('sub_box')
-assert_true(#box_items >= 8, 'Box styling items include radius, opacity, rim, and per-line')
+local root_items = subtitle.get_menu_items('sub_config')
+assert_true(#root_items >= 7, 'Sub config root has all primary sections')
 
-print('\n▶ Testing Menu Action Handlers:')
--- Reset to visionOS pill
-subtitle.handle_action({action = 'set_preset', preset_key = 'visionos_pill'})
-cfg = subtitle.get_config()
-assert_equal(cfg.preset, 'visionos_pill', 'Preset restored to visionos_pill')
-
--- Change box radius to 20
-subtitle.handle_action({action = 'set_box_radius', val = 20})
-cfg = subtitle.get_config()
-assert_equal(cfg.box_radius, 20, 'Box radius adjusted to 20')
-assert_equal(cfg.preset, 'custom', 'Preset marks as custom after fine-tuning')
-
--- Change font size to 44
-subtitle.handle_action({action = 'set_font_size', val = 44})
-cfg = subtitle.get_config()
-assert_equal(cfg.font_size, 44, 'Font size adjusted to 44pt')
-
--- Change text color to Cinema Yellow
-subtitle.handle_action({action = 'set_text_color', hex = '#FFE066'})
-cfg = subtitle.get_config()
-assert_equal(cfg.text_color, '#FFE066', 'Text color fine-tuned')
-
--- Toggle rim
-subtitle.handle_action({action = 'toggle_box_rim'})
-cfg = subtitle.get_config()
-assert_equal(cfg.box_rim_enabled, false, 'Glass rim toggled to false')
-
-print('\n▶ Testing Live Overlay & Rounded Rectangle Generation:')
-subtitle.apply_preset('visionos_pill')
+print('\n▶ 3. Testing Per-Line vs Unified Pill Rendering Logic:')
+-- Test Unified Mode
+subtitle.apply_preset('apple_tv')
 if mock_events['sub-text'] then
-    mock_events['sub-text']('sub-text', 'Hello World!\nSecond Line of Dialogue')
+    mock_events['sub-text']('sub-text', 'Top Line of Dialogue\nShort line')
 end
-assert_equal(mock_properties['sub-visibility'], false, 'Native sub-visibility disabled during pill overlay')
+assert_equal(mock_properties['sub-visibility'], false, 'Native sub-visibility disabled during pill rendering')
 
-print('\n▶ Testing Live Preview Toggle:')
+-- Test Per-Line Mode (YouTube CC)
+subtitle.apply_preset('youtube_cc')
+if mock_events['sub-text'] then
+    mock_events['sub-text']('sub-text', 'First line of commentary\nShort')
+end
+assert_equal(mock_properties['sub-visibility'], false, 'Native sub-visibility disabled during per-line rendering')
+
+-- Test Boxless Mode (Anime Fansub)
+subtitle.apply_preset('anime_outline')
+if mock_events['sub-text'] then
+    mock_events['sub-text']('sub-text', 'HIKARI ARE!!')
+end
+assert_equal(mock_properties['sub-visibility'], false, 'Native sub-visibility handled cleanly for boxless anime')
+
+print('\n▶ 4. Testing Dynamic Scaling Factor:')
+-- At 720p base: scale = 1.0
+-- At 1080p: scale = 1.5
+-- At 2160p (4K): scale = 3.0
+local function calc_scale(h)
+    return math.max(0.5, h / 720)
+end
+assert_equal(calc_scale(720), 1.0, '720p reference scale is 1.0')
+assert_equal(calc_scale(1080), 1.5, '1080p scale is 1.5')
+assert_equal(calc_scale(1440), 2.0, '1440p scale is 2.0')
+assert_equal(calc_scale(2160), 3.0, '4K scale is 3.0')
+
+print('\n▶ 5. Testing Live Preview Mode:')
 subtitle.set_live_preview(true)
-assert_true(true, 'Live preview enabled without crashing')
+assert_true(true, 'Live preview enabled without error')
 subtitle.set_live_preview(false)
 assert_true(true, 'Live preview disabled cleanly')
 

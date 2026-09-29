@@ -1,6 +1,6 @@
 -- ============================================================================
 -- LuminaX Module: Subtitle
--- Apple visionOS Rounded Rectangle Subtitle Renderer & Live Configuration System
+-- Industry-Standard Subtitle Presets & Apple visionOS Rounded Pill Subtitle System
 -- ============================================================================
 
 local ok_ass, assdraw = pcall(require, 'mp.assdraw')
@@ -15,217 +15,279 @@ local current_sub_text = ''
 local live_preview_active = false
 local config_file_path = nil
 
--- Default Subtitle Configuration
+-- ────────────────────────────────────────────────────────────────────────────
+-- 8 Industry-Standard Subtitle Presets
+-- ────────────────────────────────────────────────────────────────────────────
+local PRESETS = {
+    apple_tv = {
+        id            = 'apple_tv',
+        name          = 'Apple TV+ Glass',
+        icon          = '',
+        desc          = 'Translucent frosted pill with refined spatial glass aesthetics',
+        font_name     = 'Inter, SF Pro Text, -apple-system, sans-serif',
+        font_size     = 34,
+        font_color    = 'FFFFFF',
+        bold          = false,
+        box_enabled   = true,
+        box_mode      = 'unified',      -- single capsule enclosing all lines
+        box_color     = '000000',
+        box_opacity   = 0.68,        -- ~70% allows background video motion to seep through
+        box_radius    = 16,           -- smooth organic pill rounding
+        glass_rim     = true,          -- subtle white highlight rim (1px, ~15% alpha)
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',          -- ASS hex alpha (D0 = ~18% visibility)
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 0,
+        shadow_color  = '000000',
+        padding_x     = 22,
+        padding_y     = 12,
+        line_spacing  = 6,
+        bottom_margin = 38,
+    },
+    netflix_box = {
+        id            = 'netflix_box',
+        name          = 'Netflix Standard',
+        icon          = '🎬',
+        desc          = 'Clean dark pill with compact line spacing and balanced contrast',
+        font_name     = 'Netflix Sans, Roboto, Arial, sans-serif',
+        font_size     = 35,
+        font_color    = 'FFFFFF',
+        bold          = false,
+        box_enabled   = true,
+        box_mode      = 'per_line',     -- individual rounded boxes per line
+        box_color     = '080808',
+        box_opacity   = 0.78,
+        box_radius    = 8,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 0,
+        shadow_color  = '000000',
+        padding_x     = 16,
+        padding_y     = 9,
+        line_spacing  = 4,
+        bottom_margin = 34,
+    },
+    youtube_cc = {
+        id            = 'youtube_cc',
+        name          = 'YouTube Studio CC',
+        icon          = '▶',
+        desc          = 'Compact per-line pills hugging text tightly with small radius',
+        font_name     = 'Roboto, Arial, sans-serif',
+        font_size     = 32,
+        font_color    = 'FFFFFF',
+        bold          = true,
+        box_enabled   = true,
+        box_mode      = 'per_line',
+        box_color     = '000000',
+        box_opacity   = 0.82,
+        box_radius    = 6,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 0,
+        shadow_color  = '000000',
+        padding_x     = 14,
+        padding_y     = 7,
+        line_spacing  = 3,
+        bottom_margin = 32,
+    },
+    cinema_gold = {
+        id            = 'cinema_gold',
+        name          = 'Theatrical Gold',
+        icon          = '🍿',
+        desc          = 'Soft cinema warm yellow on a subtle dark pill for dark-room viewing',
+        font_name     = 'Futura, Gill Sans, Trebuchet MS, sans-serif',
+        font_size     = 36,
+        font_color    = 'FFE675',      -- warm pale amber/gold
+        bold          = false,
+        box_enabled   = true,
+        box_mode      = 'unified',
+        box_color     = '0A0A0A',
+        box_opacity   = 0.60,         -- lighter tint to feel more organic on film grain
+        box_radius    = 12,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 1.0,
+        shadow_color  = '000000',
+        padding_x     = 20,
+        padding_y     = 10,
+        line_spacing  = 6,
+        bottom_margin = 42,
+    },
+    criterion_minimal = {
+        id            = 'criterion_minimal',
+        name          = 'Criterion Float',
+        icon          = '⚪',
+        desc          = 'Boxless pure typography with soft drop-shadow depth',
+        font_name     = 'Gill Sans, Futura, Inter, sans-serif',
+        font_size     = 36,
+        font_color    = 'F7F7F7',
+        bold          = false,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 1.2,
+        border_color  = '141414',
+        shadow_offset = 1.8,
+        shadow_color  = '000000',
+        padding_x     = 20,
+        padding_y     = 10,
+        line_spacing  = 6,
+        bottom_margin = 36,
+    },
+    anime_outline = {
+        id            = 'anime_outline',
+        name          = 'Anime Fansub',
+        icon          = '⚔️',
+        desc          = 'Bold white text with thick pitch-black contour; boxless',
+        font_name     = 'Trebuchet MS, Montserrat, Arial, sans-serif',
+        font_size     = 38,
+        font_color    = 'FFFFFF',
+        bold          = true,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 3.2,
+        border_color  = '000000',
+        shadow_offset = 1.0,
+        shadow_color  = '000000',
+        padding_x     = 20,
+        padding_y     = 10,
+        line_spacing  = 4,
+        bottom_margin = 32,
+    },
+    bbc_accessible = {
+        id            = 'bbc_accessible',
+        name          = 'Studio Accessible CC',
+        icon          = '👁',
+        desc          = 'High-contrast cadmium yellow on 95% solid black capsule (WCAG AAA)',
+        font_name     = 'Atkinson Hyperlegible, Arial, sans-serif',
+        font_size     = 38,
+        font_color    = 'FFFF00',      -- pure high-visibility yellow
+        bold          = true,
+        box_enabled   = true,
+        box_mode      = 'per_line',
+        box_color     = '000000',
+        box_opacity   = 0.94,         -- almost solid
+        box_radius    = 8,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 0,
+        shadow_color  = '000000',
+        padding_x     = 18,
+        padding_y     = 10,
+        line_spacing  = 6,
+        bottom_margin = 38,
+    },
+    disney_slate = {
+        id            = 'disney_slate',
+        name          = 'Disney+ Midnight',
+        icon          = '✨',
+        desc          = 'Deep midnight navy glass capsule for a softer contrast transition',
+        font_name     = 'Avenir, Inter, Helvetica Neue, sans-serif',
+        font_size     = 34,
+        font_color    = 'FFFFFF',
+        bold          = false,
+        box_enabled   = true,
+        box_mode      = 'unified',
+        box_color     = '0B101E',        -- deep midnight navy
+        box_opacity   = 0.75,
+        box_radius    = 12,
+        glass_rim     = true,
+        rim_color     = '7090C0',        -- muted slate-blue hairline
+        rim_alpha     = 'E0',
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 0,
+        shadow_color  = '000000',
+        padding_x     = 20,
+        padding_y     = 11,
+        line_spacing  = 5,
+        bottom_margin = 36,
+    },
+}
+
+-- Default Active Subtitle Configuration (Initialized to Apple TV+ Glass)
 local default_config = {
-    preset          = 'visionos_pill', -- 'visionos_pill', 'netflix_modern', 'cinema_yellow', 'cyber_neon', 'anime_outline', 'minimal_clean', 'high_contrast', 'custom'
-    mode            = 'rounded_rect',   -- 'rounded_rect' (Lua overlay) or 'native'
-    -- Font & Typography
-    font            = 'Inter',
-    font_size       = 34,
-    font_bold       = false,
-    text_color      = '#FFFFFF',
-    text_alpha      = '00',            -- ASS alpha hex ('00' = 100% opaque, 'FF' = transparent)
-    -- Border & Outline
-    border_color    = '#101014',
-    border_alpha    = '00',
-    border_size     = 0.0,
-    -- Shadow
-    shadow_color    = '#000000',
-    shadow_alpha    = 'B0',
-    shadow_offset   = 0.0,
-    -- Positioning & Spacing
-    margin_y        = 28,
-    line_spacing    = 6,
-    letter_spacing  = 0.2,
-    -- Rounded Rectangle Box (Overlay Mode)
-    box_enabled     = true,
-    box_radius      = 14,              -- Corner radius in px (-1 = full pill)
-    box_color       = '#121216',        -- Background fill hex (#RRGGBB)
-    box_alpha       = '36',            -- ASS alpha hex ('36' = ~79% opacity)
-    box_pad_x       = 22,              -- Horizontal padding around text
-    box_pad_y       = 10,              -- Vertical padding around text
-    box_rim_enabled = true,            -- Subtle glassmorphic hairline rim highlight
-    box_rim_color   = '#FFFFFF',
-    box_rim_alpha   = 'D8',            -- ~16% subtle white rim
-    box_rim_size    = 1.0,
-    box_per_line    = false,           -- false: unified pill; true: pill per line
+    preset        = 'apple_tv',
+    font_name     = PRESETS.apple_tv.font_name,
+    font_size     = PRESETS.apple_tv.font_size,
+    font_color    = PRESETS.apple_tv.font_color,
+    bold          = PRESETS.apple_tv.bold,
+    box_enabled   = PRESETS.apple_tv.box_enabled,
+    box_mode      = PRESETS.apple_tv.box_mode,
+    box_color     = PRESETS.apple_tv.box_color,
+    box_opacity   = PRESETS.apple_tv.box_opacity,
+    box_radius    = PRESETS.apple_tv.box_radius,
+    glass_rim     = PRESETS.apple_tv.glass_rim,
+    rim_color     = PRESETS.apple_tv.rim_color,
+    rim_alpha     = PRESETS.apple_tv.rim_alpha,
+    border_size   = PRESETS.apple_tv.border_size,
+    border_color  = PRESETS.apple_tv.border_color,
+    shadow_offset = PRESETS.apple_tv.shadow_offset,
+    shadow_color  = PRESETS.apple_tv.shadow_color,
+    padding_x     = PRESETS.apple_tv.padding_x,
+    padding_y     = PRESETS.apple_tv.padding_y,
+    line_spacing  = PRESETS.apple_tv.line_spacing,
+    bottom_margin = PRESETS.apple_tv.bottom_margin,
 }
 
 local config = {}
 for k, v in pairs(default_config) do config[k] = v end
 
--- Prebuilt Style Presets
-local PRESETS = {
-    visionos_pill = {
-        name            = 'visionOS Glass Pill',
-        description     = 'Translucent frosted glass pill, crisp white Inter font, subtle light rim',
-        mode            = 'rounded_rect',
-        box_enabled     = true,
-        box_radius      = 14,
-        box_color       = '#121216',
-        box_alpha       = '36',
-        box_rim_enabled = true,
-        box_rim_color   = '#FFFFFF',
-        box_rim_alpha   = 'D8',
-        box_rim_size    = 1.0,
-        box_pad_x       = 22,
-        box_pad_y       = 10,
-        text_color      = '#FFFFFF',
-        text_alpha      = '00',
-        font            = 'Inter',
-        font_size       = 34,
-        font_bold       = false,
-        border_size     = 0.0,
-        shadow_offset   = 0.0,
-        margin_y        = 28,
-        line_spacing    = 6,
-    },
-    netflix_modern = {
-        name            = 'Netflix Modern Box',
-        description     = 'Sleek rounded dark box, pure white text, compact balanced padding',
-        mode            = 'rounded_rect',
-        box_enabled     = true,
-        box_radius      = 8,
-        box_color       = '#000000',
-        box_alpha       = '44',
-        box_rim_enabled = false,
-        box_pad_x       = 18,
-        box_pad_y       = 8,
-        text_color      = '#FFFFFF',
-        text_alpha      = '00',
-        font            = 'Inter',
-        font_size       = 32,
-        font_bold       = false,
-        border_size     = 0.0,
-        shadow_offset   = 0.0,
-        margin_y        = 26,
-        line_spacing    = 4,
-    },
-    cinema_yellow = {
-        name            = 'Cinema Warm Yellow',
-        description     = 'Warm golden yellow text, soft dark charcoal pill, cinematic depth',
-        mode            = 'rounded_rect',
-        box_enabled     = true,
-        box_radius      = 10,
-        box_color       = '#0D0E12',
-        box_alpha       = '28',
-        box_rim_enabled = false,
-        box_pad_x       = 20,
-        box_pad_y       = 9,
-        text_color      = '#FFE066',
-        text_alpha      = '00',
-        font            = 'Inter',
-        font_size       = 34,
-        font_bold       = false,
-        border_size     = 0.5,
-        border_color    = '#000000',
-        border_alpha    = '60',
-        shadow_offset   = 1.0,
-        shadow_color    = '#000000',
-        shadow_alpha    = 'A0',
-        margin_y        = 30,
-        line_spacing    = 6,
-    },
-    cyber_neon = {
-        name            = 'Cyberpunk Cyan Neon',
-        description     = 'Electric cyan font, dark indigo glass pill with cyan-tinted hairline glow',
-        mode            = 'rounded_rect',
-        box_enabled     = true,
-        box_radius      = 16,
-        box_color       = '#080C18',
-        box_alpha       = '30',
-        box_rim_enabled = true,
-        box_rim_color   = '#00F0FF',
-        box_rim_alpha   = 'B0',
-        box_rim_size    = 1.2,
-        box_pad_x       = 24,
-        box_pad_y       = 11,
-        text_color      = '#00F0FF',
-        text_alpha      = '00',
-        font            = 'Inter',
-        font_size       = 34,
-        font_bold       = true,
-        border_size     = 0.0,
-        shadow_offset   = 0.0,
-        margin_y        = 30,
-        line_spacing    = 6,
-    },
-    anime_outline = {
-        name            = 'Anime Crisp Outline',
-        description     = 'Pure white text, bold 3.2px pitch-black halo outline, maximum contrast',
-        mode            = 'native',
-        box_enabled     = false,
-        text_color      = '#FFFFFF',
-        text_alpha      = '00',
-        border_color    = '#000000',
-        border_alpha    = '00',
-        border_size     = 3.2,
-        shadow_offset   = 1.5,
-        shadow_color    = '#000000',
-        shadow_alpha    = '80',
-        font            = 'Inter',
-        font_size       = 36,
-        font_bold       = true,
-        margin_y        = 26,
-        line_spacing    = 4,
-    },
-    minimal_clean = {
-        name            = 'Minimalist Clean',
-        description     = 'Off-white font, subtle 1.2px drop shadow, completely borderless & boxless',
-        mode            = 'native',
-        box_enabled     = false,
-        text_color      = '#F2F2F5',
-        text_alpha      = '00',
-        border_color    = '#101014',
-        border_alpha    = 'A0',
-        border_size     = 1.0,
-        shadow_offset   = 1.2,
-        shadow_color    = '#000000',
-        shadow_alpha    = '80',
-        font            = 'Inter',
-        font_size       = 32,
-        font_bold       = false,
-        margin_y        = 24,
-        line_spacing    = 4,
-    },
-    high_contrast = {
-        name            = 'High Contrast Studio',
-        description     = 'Bold yellow text on solid 96% black 12px pill, maximum readability',
-        mode            = 'rounded_rect',
-        box_enabled     = true,
-        box_radius      = 12,
-        box_color       = '#000000',
-        box_alpha       = '0A',
-        box_rim_enabled = true,
-        box_rim_color   = '#FFDE03',
-        box_rim_alpha   = 'C0',
-        box_rim_size    = 1.0,
-        box_pad_x       = 22,
-        box_pad_y       = 10,
-        text_color      = '#FFDE03',
-        text_alpha      = '00',
-        font            = 'Inter',
-        font_size       = 36,
-        font_bold       = true,
-        border_size     = 0.0,
-        shadow_offset   = 0.0,
-        margin_y        = 30,
-        line_spacing    = 6,
-    },
-}
+-- ────────────────────────────────────────────────────────────────────────────
+-- Helper Functions: Color Conversion, Metrics & Scaling
+-- ────────────────────────────────────────────────────────────────────────────
 
--- Hex to ASS BGR and Alpha Conversion Helper
-local function hex_to_ass(hex_str)
-    if not hex_str or type(hex_str) ~= 'string' then return '&HFFFFFF&', '00' end
+-- ASS Color Encoding Caution: Convert RGB hex "RRGGBB" -> ASS BGR "&HBBGGRR&"
+local function rgb_to_ass(hex_str)
+    if not hex_str or type(hex_str) ~= 'string' then return '&HFFFFFF&' end
     local h = hex_str:gsub('#', ''):upper()
     if #h == 6 then
         local r, g, b = h:sub(1, 2), h:sub(3, 4), h:sub(5, 6)
-        return '&H' .. b .. g .. r .. '&', '00'
+        return '&H' .. b .. g .. r .. '&'
     elseif #h == 8 then
-        local a, r, g, b = h:sub(1, 2), h:sub(3, 4), h:sub(5, 6), h:sub(7, 8)
-        return '&H' .. b .. g .. r .. '&', a
+        local r, g, b = h:sub(3, 4), h:sub(5, 6), h:sub(7, 8)
+        return '&H' .. b .. g .. r .. '&'
     end
-    return '&HFFFFFF&', '00'
+    return '&HFFFFFF&'
+end
+
+-- Convert opacity (0.0 to 1.0) -> ASS alpha hex (00 = 100% opaque, FF = transparent)
+local function opacity_to_ass_alpha(opacity)
+    local op = tonumber(opacity) or 1.0
+    op = math.max(0.0, math.min(1.0, op))
+    local alpha = math.floor((1.0 - op) * 255 + 0.5)
+    return string.format('%02X', alpha)
+end
+
+-- Extract primary typeface family from comma-separated list
+local function get_primary_font(font_str)
+    if not font_str or font_str == '' then return 'Inter' end
+    local first = font_str:match('^%s*([^,]+)')
+    return first and first:gsub('^%s+', ''):gsub('%s+$', '') or 'Inter'
 end
 
 -- Strip ASS override tags and basic HTML tags for accurate width estimation
@@ -238,7 +300,7 @@ local function strip_tags(str)
 end
 
 -- Font Metric Character Width Estimation
-local function estimate_char_width(byte, next_byte, fs, is_bold)
+local function estimate_char_width(byte, fs, is_bold)
     local bold_factor = is_bold and 1.06 or 1.0
     -- Multi-byte UTF-8 character (e.g. CJK, emoji)
     if byte >= 0xC0 then
@@ -275,13 +337,16 @@ local function estimate_text_width(text, fs, is_bold)
         elseif b >= 0xE0 then step = 3
         elseif b >= 0xC0 then step = 2
         end
-        w = w + estimate_char_width(b, nil, fs, is_bold)
+        w = w + estimate_char_width(b, fs, is_bold)
         i = i + step
     end
     return math.ceil(w)
 end
 
--- Load and Save Configuration Persistence
+-- ────────────────────────────────────────────────────────────────────────────
+-- Persistence (Save & Load Config)
+-- ────────────────────────────────────────────────────────────────────────────
+
 local function get_config_path()
     if config_file_path then return config_file_path end
     if mp and mp.command_native then
@@ -326,72 +391,74 @@ local function save_config()
     f:close()
 end
 
--- Apply Configuration: sync native properties or activate overlay
+-- ────────────────────────────────────────────────────────────────────────────
+-- Apply Configuration & Synchronize Native MPV Properties
+-- ────────────────────────────────────────────────────────────────────────────
+
 function M.apply_config(skip_save)
     if not skip_save then save_config() end
 
-    local is_overlay = (config.mode == 'rounded_rect' and config.box_enabled)
     local sid = mp.get_property('sid')
     local sub_off = (sid == 'no' or sid == nil)
 
-    if is_overlay then
-        -- In rounded rect mode, hide native subtitles so only the clean pill is drawn
+    if config.box_enabled then
+        -- In pill overlay mode, visually hide native subtitles so only the rounded pill is drawn
         if not sub_off then
             mp.set_property_bool('sub-visibility', false)
         end
         M.update_overlay()
     else
-        -- Native mode: restore sub-visibility and sync native properties
+        -- Boxless mode: hide native if we render via overlay, or sync native properties
         if not sub_off then
-            mp.set_property_bool('sub-visibility', true)
+            mp.set_property_bool('sub-visibility', false)
         end
-        if overlay then overlay:remove() end
+        M.update_overlay()
 
-        -- Push styling to mpv native properties
-        pcall(mp.set_property, 'sub-font', config.font)
+        -- Also keep mpv native properties synchronized in case user toggles visibility manually
+        local font = get_primary_font(config.font_name)
+        pcall(mp.set_property, 'sub-font', font)
         pcall(mp.set_property, 'sub-font-size', tostring(config.font_size))
-        pcall(mp.set_property, 'sub-bold', config.font_bold and 'yes' or 'no')
-        pcall(mp.set_property, 'sub-color', config.text_color)
-        pcall(mp.set_property, 'sub-border-color', config.border_color)
-        pcall(mp.set_property, 'sub-border-size', tostring(config.border_size))
-        pcall(mp.set_property, 'sub-shadow-offset', tostring(config.shadow_offset))
-        pcall(mp.set_property, 'sub-shadow-color', config.shadow_color .. config.shadow_alpha)
-        pcall(mp.set_property, 'sub-margin-y', tostring(config.margin_y))
+        pcall(mp.set_property, 'sub-bold', config.bold and 'yes' or 'no')
+        pcall(mp.set_property, 'sub-color', '#' .. (config.font_color or 'FFFFFF'))
+        pcall(mp.set_property, 'sub-border-color', '#' .. (config.border_color or '000000'))
+        pcall(mp.set_property, 'sub-border-size', tostring(config.border_size or 0))
+        pcall(mp.set_property, 'sub-shadow-offset', tostring(config.shadow_offset or 0))
+        pcall(mp.set_property, 'sub-shadow-color', '#' .. (config.shadow_color or '000000') .. 'A0')
+        pcall(mp.set_property, 'sub-margin-y', tostring(config.bottom_margin or 36))
     end
 
     if ctx_ref.request_tick then ctx_ref.request_tick() end
 end
 
--- Apply a prebuilt style preset
-function M.apply_preset(preset_key)
-    local p = PRESETS[preset_key]
+-- Apply an industry-standard style preset
+function M.apply_preset(preset_id)
+    local p = PRESETS[preset_id]
     if not p then return end
-    config.preset = preset_key
+    config.preset = preset_id
     for k, v in pairs(p) do
-        if k ~= 'name' and k ~= 'description' then
+        if k ~= 'id' and k ~= 'name' and k ~= 'desc' and k ~= 'icon' then
             config[k] = v
         end
     end
     M.apply_config()
-    mp.osd_message('✓ Subtitle Preset: ' .. p.name, 2.5)
+    mp.osd_message(string.format('%s  Preset Applied: %s', p.icon or '✓', p.name), 2.5)
 end
 
--- Render Rounded Rectangle Subtitle Overlay
+-- ────────────────────────────────────────────────────────────────────────────
+-- Rounded Rectangle Subtitle Overlay Renderer
+-- ────────────────────────────────────────────────────────────────────────────
+
 function M.update_overlay()
     if not overlay then return end
-
-    local is_overlay = (config.mode == 'rounded_rect' and config.box_enabled)
-    if not is_overlay then
-        overlay:remove()
-        return
-    end
 
     local sid = mp.get_property('sid')
     local sub_off = (sid == 'no' or sid == nil)
 
     local text_to_render = current_sub_text
     if live_preview_active and (text_to_render == '' or sub_off) then
-        text_to_render = 'Sample Subtitle  •  Apple visionOS Pill Style'
+        local p_info = PRESETS[config.preset]
+        local p_name = p_info and p_info.name or 'Custom'
+        text_to_render = string.format('Sample Subtitle  •  %s Style', p_name)
     end
 
     if (text_to_render == '' or sub_off) and not live_preview_active then
@@ -406,6 +473,11 @@ function M.update_overlay()
         local ow, oh = mp.get_osd_size()
         w = ow or 1280; h = oh or 720
     end
+
+    -- Dynamic Font Scaling: reference 720p canvas
+    local scale = math.max(0.5, h / 720)
+    local fs    = math.floor((config.font_size or 34) * scale + 0.5)
+    local is_bold = config.bold or false
 
     -- Process subtitle text lines
     local raw_lines = {}
@@ -422,11 +494,11 @@ function M.update_overlay()
         return
     end
 
-    local fs        = config.font_size or 34
-    local is_bold   = config.font_bold or false
-    local line_h    = math.ceil(fs * 1.28 + (config.line_spacing or 6))
-    local pad_x     = config.box_pad_x or 22
-    local pad_y     = config.box_pad_y or 10
+    local line_sp  = math.floor((config.line_spacing or 6) * scale + 0.5)
+    local line_h   = math.ceil(fs * 1.28 + line_sp)
+    local pad_x    = math.floor((config.padding_x or 20) * scale + 0.5)
+    local pad_y    = math.floor((config.padding_y or 10) * scale + 0.5)
+    local margin_y = math.floor((config.bottom_margin or 38) * scale + 0.5)
 
     local line_widths = {}
     local max_lw = 0
@@ -440,40 +512,46 @@ function M.update_overlay()
     local total_lines = #raw_lines
     local ass = assdraw.ass_new()
 
-    -- Color conversions
-    local box_bgr, _        = hex_to_ass(config.box_color)
-    local box_a             = config.box_alpha or '36'
-    local rim_bgr, _        = hex_to_ass(config.box_rim_color or '#FFFFFF')
-    local rim_a             = config.box_rim_alpha or 'D8'
-    local rim_w             = config.box_rim_enabled and (config.box_rim_size or 1.0) or 0
+    -- Color & Alpha encodings (ASS expects BGR)
+    local txt_bgr   = rgb_to_ass(config.font_color or 'FFFFFF')
+    local box_bgr   = rgb_to_ass(config.box_color or '000000')
+    local box_a     = opacity_to_ass_alpha(config.box_opacity or 0.70)
+    local rim_bgr   = rgb_to_ass(config.rim_color or 'FFFFFF')
+    local rim_a     = config.rim_alpha or 'D0'
+    local rim_w     = config.glass_rim and math.max(0.8, 1.0 * scale) or 0
 
-    local txt_bgr, _        = hex_to_ass(config.text_color)
-    local txt_a             = config.text_alpha or '00'
-    local bord_bgr, _       = hex_to_ass(config.border_color)
-    local bord_a            = config.border_alpha or '00'
-    local bord_w            = config.border_size or 0
-    local shad_bgr, _       = hex_to_ass(config.shadow_color)
-    local shad_a            = config.shadow_alpha or 'B0'
-    local shad_off          = config.shadow_offset or 0
+    local bord_bgr  = rgb_to_ass(config.border_color or '000000')
+    local bord_w    = (config.border_size and config.border_size > 0) and math.max(0.5, config.border_size * scale) or 0
+    local shad_bgr  = rgb_to_ass(config.shadow_color or '000000')
+    local shad_off  = (config.shadow_offset and config.shadow_offset > 0) and math.max(0.5, config.shadow_offset * scale) or 0
 
-    local cx                = math.floor(w / 2)
-    local margin_y          = config.margin_y or 28
+    local cx        = math.floor(w / 2)
+    local font_face = get_primary_font(config.font_name)
 
-    if config.box_per_line and total_lines > 1 then
-        -- Multi-pill mode: individual rounded pill per line
-        local total_h = total_lines * line_h + (total_lines - 1) * 6
+    -- Base corner radius scaled
+    local raw_r     = config.box_radius or 14
+    local scaled_r  = (raw_r == -1) and -1 or math.floor(raw_r * scale + 0.5)
+
+    if config.box_enabled and config.box_mode == 'per_line' then
+        -- ────────────────────────────────────────────────────────────────────
+        -- 1. Per-Line Pill Rendering (YouTube Studio / Netflix / BBC CC)
+        -- ────────────────────────────────────────────────────────────────────
+        local gap = math.max(4, math.floor(line_sp * 0.8))
+        local line_box_h = line_h + pad_y * 2
+        local total_h = (total_lines * line_box_h) + ((total_lines - 1) * gap)
         local start_y = h - margin_y - total_h
+
         for i, line in ipairs(raw_lines) do
             local lw   = line_widths[i] or max_lw
             local pw   = lw + pad_x * 2
-            local ph   = line_h + pad_y
-            local r    = (config.box_radius == -1) and math.floor(ph / 2) or math.min(config.box_radius or 14, math.floor(ph / 2))
-            local ly0  = start_y + (i - 1) * (ph + 6)
+            local ph   = line_box_h
+            local r    = (scaled_r == -1) and math.floor(ph / 2) or math.min(scaled_r, math.floor(ph / 2))
+            local ly0  = start_y + (i - 1) * (ph + gap)
             local ly1  = ly0 + ph
             local lx0  = cx - math.floor(pw / 2)
             local lx1  = cx + math.floor(pw / 2)
 
-            -- 1. Draw Pill Box
+            -- Background Pill
             ass:new_event()
             ass:pos(0, 0)
             ass:an(7)
@@ -483,28 +561,31 @@ function M.update_overlay()
             ass:round_rect_cw(lx0, ly0, lx1, ly1, r)
             ass:draw_stop()
 
-            -- 2. Draw Text Line
+            -- Text inside line pill
             local text_cy = ly0 + math.floor(ph / 2)
             ass:new_event()
             ass:pos(cx, text_cy)
             ass:an(5)
-            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H%s&\\bord%s\\3c%s\\3a&H%s&\\shad%s\\4c%s\\4a&H%s&\\q2}',
-                config.font or 'Inter', fs, is_bold and '\\b700' or '\\b400',
-                txt_bgr, txt_a, tostring(bord_w), bord_bgr, bord_a, tostring(shad_off), shad_bgr, shad_a))
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\q2}',
+                font_face, fs, is_bold and '\\b700' or '\\b400',
+                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
             ass:append(line)
         end
-    else
-        -- Unified pill mode (Apple visionOS standard)
+
+    elseif config.box_enabled then
+        -- ────────────────────────────────────────────────────────────────────
+        -- 2. Unified Pill Rendering (Apple TV+ / Cinema Gold / Disney+)
+        -- ────────────────────────────────────────────────────────────────────
         local pill_w = max_lw + pad_x * 2
         local pill_h = (total_lines * line_h) + pad_y * 2
-        local r      = (config.box_radius == -1) and math.floor(pill_h / 2) or math.min(config.box_radius or 14, math.floor(pill_h / 2))
+        local r      = (scaled_r == -1) and math.floor(pill_h / 2) or math.min(scaled_r, math.floor(pill_h / 2))
 
         local y1     = h - margin_y
         local y0     = y1 - pill_h
         local x0     = cx - math.floor(pill_w / 2)
         local x1     = cx + math.floor(pill_w / 2)
 
-        -- 1. Draw Background Rounded Rectangle
+        -- Background Capsule
         ass:new_event()
         ass:pos(0, 0)
         ass:an(7)
@@ -514,15 +595,34 @@ function M.update_overlay()
         ass:round_rect_cw(x0, y0, x1, y1, r)
         ass:draw_stop()
 
-        -- 2. Draw Each Line of Text
+        -- Text Lines inside unified capsule
         for i, line in ipairs(raw_lines) do
             local text_cy = y0 + pad_y + math.floor((i - 0.5) * line_h)
             ass:new_event()
             ass:pos(cx, text_cy)
             ass:an(5)
-            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H%s&\\bord%s\\3c%s\\3a&H%s&\\shad%s\\4c%s\\4a&H%s&\\q2}',
-                config.font or 'Inter', fs, is_bold and '\\b700' or '\\b400',
-                txt_bgr, txt_a, tostring(bord_w), bord_bgr, bord_a, tostring(shad_off), shad_bgr, shad_a))
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\q2}',
+                font_face, fs, is_bold and '\\b700' or '\\b400',
+                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
+            ass:append(line)
+        end
+
+    else
+        -- ────────────────────────────────────────────────────────────────────
+        -- 3. Boxless Typography (Anime Fansub / Criterion Float)
+        -- ────────────────────────────────────────────────────────────────────
+        local total_h = total_lines * line_h
+        local y1      = h - margin_y
+        local y0      = y1 - total_h
+
+        for i, line in ipairs(raw_lines) do
+            local text_cy = y0 + math.floor((i - 0.5) * line_h)
+            ass:new_event()
+            ass:pos(cx, text_cy)
+            ass:an(5)
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H90&\\q2}',
+                font_face, fs, is_bold and '\\b700' or '\\b400',
+                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
             ass:append(line)
         end
     end
@@ -533,7 +633,10 @@ function M.update_overlay()
     overlay:update()
 end
 
--- Module Initialization
+-- ────────────────────────────────────────────────────────────────────────────
+-- Module Lifecycle & Event Listeners
+-- ────────────────────────────────────────────────────────────────────────────
+
 function M.init(ctx)
     ctx_ref = ctx or {}
     overlay = mp.create_osd_overlay('ass-events')
@@ -559,12 +662,14 @@ function M.init(ctx)
     M.apply_config(true)
 end
 
--- Get Current Configuration Copy
 function M.get_config()
     return config
 end
 
--- Set Live Preview Mode (when menu is active to preview style tweaks)
+function M.get_presets()
+    return PRESETS
+end
+
 function M.set_live_preview(active)
     live_preview_active = active
     M.update_overlay()
@@ -577,8 +682,8 @@ end
 function M.get_menu_title(menu_type)
     local titles = {
         sub_config  = 'SUBTITLE CONFIGURATION',
-        sub_presets = 'SUBTITLE STYLE PRESETS',
-        sub_box     = 'ROUNDED RECTANGLE STYLE',
+        sub_presets = 'INDUSTRY STYLE PRESETS',
+        sub_box     = 'ROUNDED PILL & BOX STYLE',
         sub_text    = 'TEXT COLOR & TYPOGRAPHY',
         sub_border  = 'BORDER & SHADOW STYLING',
         sub_layout  = 'POSITION & SPACING',
@@ -590,56 +695,59 @@ function M.get_menu_items(menu_type)
     local items = {}
 
     if menu_type == 'sub_config' then
-        local p_name = PRESETS[config.preset] and PRESETS[config.preset].name or 'Custom'
-        local box_status = (config.mode == 'rounded_rect' and config.box_enabled)
-            and ('Pill Enabled (' .. (config.box_radius == -1 and 'Full' or (config.box_radius .. 'px')) .. ')')
-            or 'Disabled (Native)'
+        local p_info = PRESETS[config.preset]
+        local p_name = p_info and (p_info.icon .. '  ' .. p_info.name) or '🎨 Custom'
+        local box_desc = config.box_enabled
+            and (string.format('%s  •  %dpx  •  %d%% Opacity',
+                    config.box_mode == 'per_line' and 'Per-Line Pill' or 'Unified Pill',
+                    config.box_radius, math.floor(config.box_opacity * 100)))
+            or 'Disabled (Boxless)'
 
         items[#items + 1] = {
             label = '✦  Style Presets  ▸',
-            sublabel = 'Active: ' .. p_name .. ' • Press Enter to select presets',
+            sublabel = 'Active: ' .. p_name .. ' • 8 Industry Platform Standards',
             action = 'nav_menu',
             target = 'sub_presets',
             index = #items + 1
         }
         items[#items + 1] = {
-            label = '▢  Rounded Rectangle Style  ▸',
-            sublabel = box_status .. ' • Corner radius, opacity, padding & glass rim',
+            label = '▢  Rounded Pill & Box Style  ▸',
+            sublabel = box_desc .. ' • Curvature, glass rim & opacity',
             action = 'nav_menu',
             target = 'sub_box',
             index = #items + 1
         }
         items[#items + 1] = {
             label = '🎨  Text Color & Typography  ▸',
-            sublabel = string.format('%s  •  %dpt  •  %s', config.font, config.font_size, config.text_color),
+            sublabel = string.format('%s  •  %dpt  •  #%s', get_primary_font(config.font_name), config.font_size, config.font_color),
             action = 'nav_menu',
             target = 'sub_text',
             index = #items + 1
         }
         items[#items + 1] = {
             label = '🔲  Border & Shadow  ▸',
-            sublabel = string.format('Border: %.1fpx  •  Shadow: %.1fpx', config.border_size, config.shadow_offset),
+            sublabel = string.format('Border: %.1fpx  •  Shadow: %.1fpx', config.border_size or 0, config.shadow_offset or 0),
             action = 'nav_menu',
             target = 'sub_border',
             index = #items + 1
         }
         items[#items + 1] = {
             label = '📐  Position & Line Spacing  ▸',
-            sublabel = string.format('Bottom Margin: %dpx  •  Spacing: %+dpx', config.margin_y, config.line_spacing),
+            sublabel = string.format('Bottom Margin: %dpx  •  Line Spacing: %+dpx', config.bottom_margin or 38, config.line_spacing or 6),
             action = 'nav_menu',
             target = 'sub_layout',
             index = #items + 1
         }
         items[#items + 1] = {
-            label = config.mode == 'rounded_rect' and '👁  Switch Mode: Native MPV Style' or '👁  Switch Mode: visionOS Rounded Pill',
-            sublabel = config.mode == 'rounded_rect' and 'Toggle to native libass subtitle rendering' or 'Toggle to Apple-grade rounded glass overlay',
-            action = 'toggle_mode',
-            current = (config.mode == 'rounded_rect'),
+            label = config.box_enabled and '👁  Pill Background: [ON]' or '👁  Pill Background: [OFF] Boxless',
+            sublabel = 'Quick toggle between rounded capsule backdrop and pure boxless text',
+            action = 'toggle_box_enabled',
+            current = config.box_enabled,
             index = #items + 1
         }
         items[#items + 1] = {
-            label = '↺  Reset to Default (visionOS Pill)',
-            sublabel = 'Restores default Apple visionOS frosted pill styling',
+            label = '↺  Reset to Apple TV+ Glass',
+            sublabel = 'Restores Apple visionOS spatial frosted pill styling',
             action = 'reset_defaults',
             index = #items + 1
         }
@@ -652,15 +760,24 @@ function M.get_menu_items(menu_type)
         }
 
     elseif menu_type == 'sub_presets' then
-        local order = {'visionos_pill', 'netflix_modern', 'cinema_yellow', 'cyber_neon', 'anime_outline', 'minimal_clean', 'high_contrast'}
-        for _, key in ipairs(order) do
-            local p = PRESETS[key]
+        local order = {
+            'apple_tv',
+            'netflix_box',
+            'youtube_cc',
+            'cinema_gold',
+            'criterion_minimal',
+            'anime_outline',
+            'bbc_accessible',
+            'disney_slate'
+        }
+        for _, id in ipairs(order) do
+            local p = PRESETS[id]
             items[#items + 1] = {
-                label = p.name,
-                sublabel = p.description,
+                label = string.format('%s  %s', p.icon or '•', p.name),
+                sublabel = p.desc,
                 action = 'set_preset',
-                preset_key = key,
-                current = (config.preset == key),
+                preset_id = id,
+                current = (config.preset == id),
                 index = #items + 1
             }
         end
@@ -673,18 +790,25 @@ function M.get_menu_items(menu_type)
 
     elseif menu_type == 'sub_box' then
         items[#items + 1] = {
-            label = config.box_enabled and 'Box Mode: [ON] Rounded Rectangle' or 'Box Mode: [OFF] Transparent Background',
-            sublabel = 'Enable/disable drawing rounded background pill behind subtitles',
+            label = config.box_enabled and 'Box Mode: [ON] Rounded Capsule' or 'Box Mode: [OFF] Boxless Text',
+            sublabel = 'Enable/disable drawing rounded pill backdrop behind dialogue',
             action = 'toggle_box_enabled',
             current = config.box_enabled,
             index = #items + 1
         }
+        items[#items + 1] = {
+            label = config.box_mode == 'unified' and 'Layout: Single Unified Capsule' or 'Layout: Per-Line Individual Pills',
+            sublabel = config.box_mode == 'unified' and 'Single enclosing pill for all lines (Apple TV / Cinema)' or 'Individual badges hugging each line tightly (YouTube / Netflix)',
+            action = 'toggle_box_mode',
+            current = (config.box_mode == 'per_line'),
+            index = #items + 1
+        }
         local radii = {
-            {label = 'Full Pill (Smooth Capsule)', val = -1, sub = 'Fully rounded capsule ends'},
-            {label = '20px Corner Radius', val = 20, sub = 'Extra soft modern rounded corners'},
-            {label = '14px Corner Radius (Standard)', val = 14, sub = 'Apple visionOS standard curvature'},
-            {label = '8px Corner Radius', val = 8, sub = 'Subtle modern TV rounded box'},
-            {label = '4px Corner Radius', val = 4, sub = 'Slightly rounded compact box'},
+            {label = 'Full Capsule (Pill)', val = -1, sub = 'Fully rounded capsule ends'},
+            {label = '16px Corner Radius (Apple TV+)', val = 16, sub = 'Organic smooth spatial curve'},
+            {label = '12px Corner Radius (Disney+)', val = 12, sub = 'Balanced modern TV curvature'},
+            {label = '8px Corner Radius (Netflix)', val = 8, sub = 'Compact modern streaming box'},
+            {label = '6px Corner Radius (YouTube CC)', val = 6, sub = 'Tight badge corner rounding'},
         }
         for _, r in ipairs(radii) do
             items[#items + 1] = {
@@ -697,33 +821,28 @@ function M.get_menu_items(menu_type)
             }
         end
         local opacities = {
-            {label = '95% Solid Dark', val = '0D'},
-            {label = '80% Balanced Glass (Default)', val = '36'},
-            {label = '65% Translucent Glass', val = '5A'},
-            {label = '45% Subtle Tint', val = '8C'},
+            {label = '94% Solid Black (Studio CC)', val = 0.94},
+            {label = '82% High Contrast (YouTube)', val = 0.82},
+            {label = '78% Balanced (Netflix Standard)', val = 0.78},
+            {label = '75% Slate (Disney+ Midnight)', val = 0.75},
+            {label = '68% Spatial Glass (Apple TV+)', val = 0.68},
+            {label = '60% Ambient Tint (Cinema 35mm)', val = 0.60},
         }
         for _, op in ipairs(opacities) do
             items[#items + 1] = {
                 label = 'Box Opacity: ' .. op.label,
                 sublabel = 'Adjust glass translucency and dialog readability',
-                action = 'set_box_alpha',
+                action = 'set_box_opacity',
                 val = op.val,
-                current = (config.box_alpha == op.val),
+                current = (math.abs(config.box_opacity - op.val) < 0.02),
                 index = #items + 1
             }
         end
         items[#items + 1] = {
-            label = config.box_rim_enabled and 'Glass Hairline Rim: [ON] 1.0px' or 'Glass Hairline Rim: [OFF]',
-            sublabel = 'Sleek frosted visionOS glass edge highlight',
-            action = 'toggle_box_rim',
-            current = config.box_rim_enabled,
-            index = #items + 1
-        }
-        items[#items + 1] = {
-            label = config.box_per_line and 'Pill Layout: Individual Pill Per Line' or 'Pill Layout: Single Unified Pill',
-            sublabel = 'Toggle between single pill or segmented multi-line pills',
-            action = 'toggle_per_line',
-            current = config.box_per_line,
+            label = config.glass_rim and 'Glass Rim Highlight: [ON]' or 'Glass Rim Highlight: [OFF]',
+            sublabel = 'Subtle translucent hairline highlight rim separating pill from bright backgrounds',
+            action = 'toggle_glass_rim',
+            current = config.glass_rim,
             index = #items + 1
         }
         items[#items + 1] = {
@@ -735,28 +854,27 @@ function M.get_menu_items(menu_type)
 
     elseif menu_type == 'sub_text' then
         local colors = {
-            {name = 'Pure White', hex = '#FFFFFF', desc = 'Crisp standard white'},
-            {name = 'Warm Ivory', hex = '#FFF8E7', desc = 'Soft warm white for reduced eye fatigue'},
-            {name = 'Cinema Yellow', hex = '#FFE066', desc = 'Golden yellow for bright backgrounds'},
-            {name = 'Cyber Cyan', hex = '#00F0FF', desc = 'Vibrant neon cyan accent'},
-            {name = 'Pastel Mint', hex = '#70E0B0', desc = 'Soft modern pastel green'},
-            {name = 'Soft Peach', hex = '#FFD1BA', desc = 'Warm cinematic peach hue'},
+            {name = 'Pure White', hex = 'FFFFFF', desc = 'Crisp standard white (Apple / Netflix)'},
+            {name = 'Theatrical Warm Gold', hex = 'FFE675', desc = 'Cinema 35mm pale amber gold for dark rooms'},
+            {name = 'Accessible Yellow', hex = 'FFFF00', desc = 'WCAG AAA pure cadmium yellow (BBC CC)'},
+            {name = 'Criterion Off-White', hex = 'F7F7F7', desc = 'Clean neutral ivory for film immersion'},
+            {name = 'Cyber Cyan', hex = '00F0FF', desc = 'High-visibility neon cyan accent'},
         }
         for _, c in ipairs(colors) do
             items[#items + 1] = {
-                label = 'Color: ' .. c.name .. ' (' .. c.hex .. ')',
+                label = 'Color: ' .. c.name .. ' (#' .. c.hex .. ')',
                 sublabel = c.desc,
-                action = 'set_text_color',
+                action = 'set_font_color',
                 hex = c.hex,
-                current = (config.text_color == c.hex),
+                current = (config.font_color:upper() == c.hex:upper()),
                 index = #items + 1
             }
         end
-        local sizes = {28, 32, 34, 38, 44, 50}
+        local sizes = {32, 34, 35, 36, 38, 44}
         for _, s in ipairs(sizes) do
             items[#items + 1] = {
-                label = string.format('Font Size: %dpt %s', s, (s == 34 and '(Default)' or '')),
-                sublabel = 'Adjust subtitle typography scale',
+                label = string.format('Font Size: %dpt %s', s, (s == 34 and '(Apple TV+)' or (s == 35 and '(Netflix)' or ''))),
+                sublabel = 'Adjust dialogue typography scale',
                 action = 'set_font_size',
                 val = s,
                 current = (config.font_size == s),
@@ -764,10 +882,10 @@ function M.get_menu_items(menu_type)
             }
         end
         items[#items + 1] = {
-            label = config.font_bold and 'Font Weight: Bold [ON]' or 'Font Weight: Regular [OFF]',
-            sublabel = 'Toggle between medium and bold typeface',
+            label = config.bold and 'Font Weight: Bold [ON]' or 'Font Weight: Regular [OFF]',
+            sublabel = 'Toggle between regular and bold typeface weight',
             action = 'toggle_bold',
-            current = config.font_bold,
+            current = config.bold,
             index = #items + 1
         }
         items[#items + 1] = {
@@ -779,27 +897,26 @@ function M.get_menu_items(menu_type)
 
     elseif menu_type == 'sub_border' then
         local b_sizes = {
-            {label = '0.0px (None / Flat)', val = 0.0},
-            {label = '1.0px (Delicate Hairline)', val = 1.0},
-            {label = '1.8px (Standard Halo)', val = 1.8},
-            {label = '2.8px (High Visibility)', val = 2.8},
-            {label = '3.5px (Heavy Anime Outline)', val = 3.5},
+            {label = '0.0px (None / Clean Glass)', val = 0.0},
+            {label = '1.2px (Criterion Depth)', val = 1.2},
+            {label = '2.0px (Medium Contour)', val = 2.0},
+            {label = '3.2px (Anime Fansub Stroke)', val = 3.2},
         }
         for _, b in ipairs(b_sizes) do
             items[#items + 1] = {
                 label = 'Outline: ' .. b.label,
-                sublabel = 'Text outline border width',
+                sublabel = 'Text contour stroke width',
                 action = 'set_border_size',
                 val = b.val,
-                current = (math.abs(config.border_size - b.val) < 0.1),
+                current = (math.abs((config.border_size or 0) - b.val) < 0.1),
                 index = #items + 1
             }
         end
         local shadows = {
-            {label = '0.0px (No Shadow)', val = 0.0},
-            {label = '1.0px (Subtle Depth)', val = 1.0},
-            {label = '1.8px (Standard Shadow)', val = 1.8},
-            {label = '3.0px (Deep Shadow)', val = 3.0},
+            {label = '0.0px (None / Flat)', val = 0.0},
+            {label = '1.0px (Cinema Subtle Shadow)', val = 1.0},
+            {label = '1.8px (Criterion Float Shadow)', val = 1.8},
+            {label = '3.0px (Deep Drop Shadow)', val = 3.0},
         }
         for _, s in ipairs(shadows) do
             items[#items + 1] = {
@@ -807,7 +924,7 @@ function M.get_menu_items(menu_type)
                 sublabel = 'Text drop-shadow offset',
                 action = 'set_shadow_offset',
                 val = s.val,
-                current = (math.abs(config.shadow_offset - s.val) < 0.1),
+                current = (math.abs((config.shadow_offset or 0) - s.val) < 0.1),
                 index = #items + 1
             }
         end
@@ -820,26 +937,28 @@ function M.get_menu_items(menu_type)
 
     elseif menu_type == 'sub_layout' then
         local margins = {
-            {label = '18px (Low / Screen Edge)', val = 18},
-            {label = '28px (Standard Apple TV)', val = 28},
-            {label = '42px (Elevated / Safe Zone)', val = 42},
-            {label = '60px (High / Upper Bar Clear)', val = 60},
+            {label = '32px (Anime / YouTube Compact)', val = 32},
+            {label = '34px (Netflix Standard)', val = 34},
+            {label = '36px (Disney+ Midnight)', val = 36},
+            {label = '38px (Apple TV+ / Studio CC)', val = 38},
+            {label = '42px (Cinema Warm Gold)', val = 42},
         }
         for _, m in ipairs(margins) do
             items[#items + 1] = {
                 label = 'Bottom Margin: ' .. m.label,
-                sublabel = 'Vertical position above bottom window edge',
-                action = 'set_margin_y',
+                sublabel = 'Vertical elevation above video bottom edge',
+                action = 'set_bottom_margin',
                 val = m.val,
-                current = (config.margin_y == m.val),
+                current = (config.bottom_margin == m.val),
                 index = #items + 1
             }
         end
         local spacings = {
-            {label = 'Compact (+2px)', val = 2},
-            {label = 'Standard (+6px)', val = 6},
-            {label = 'Relaxed (+10px)', val = 10},
-            {label = 'Spacious (+16px)', val = 16},
+            {label = '3px (YouTube CC Compact)', val = 3},
+            {label = '4px (Netflix Standard)', val = 4},
+            {label = '5px (Disney+ Modern)', val = 5},
+            {label = '6px (Apple TV+ Spatial)', val = 6},
+            {label = '8px (Relaxed Arthouse)', val = 8},
         }
         for _, sp in ipairs(spacings) do
             items[#items + 1] = {
@@ -862,83 +981,72 @@ function M.get_menu_items(menu_type)
     return items
 end
 
--- Handle Subtitle Menu Actions
+-- ────────────────────────────────────────────────────────────────────────────
+-- Handle Subtitle Menu Action Dispatcher
+-- ────────────────────────────────────────────────────────────────────────────
+
 function M.handle_action(item)
     if not item or not item.action then return end
 
-    if item.action == 'set_preset' and item.preset_key then
-        M.apply_preset(item.preset_key)
-
-    elseif item.action == 'toggle_mode' then
-        if config.mode == 'rounded_rect' then
-            config.mode = 'native'
-            config.box_enabled = false
-            mp.osd_message('Mode: Native MPV Subtitles', 2)
-        else
-            config.mode = 'rounded_rect'
-            config.box_enabled = true
-            mp.osd_message('Mode: visionOS Rounded Rectangle Pill', 2)
-        end
-        config.preset = 'custom'
-        M.apply_config()
+    if item.action == 'set_preset' and item.preset_id then
+        M.apply_preset(item.preset_id)
 
     elseif item.action == 'reset_defaults' then
-        for k, v in pairs(default_config) do config[k] = v end
-        M.apply_preset('visionos_pill')
+        M.apply_preset('apple_tv')
 
     elseif item.action == 'toggle_box_enabled' then
         config.box_enabled = not config.box_enabled
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message(config.box_enabled and '✓ Subtitle Box: Enabled' or '✓ Subtitle Box: Disabled', 2)
+        mp.osd_message(config.box_enabled and '✓ Subtitle Pill: Enabled' or '✓ Subtitle Box: Disabled (Boxless)', 2)
+
+    elseif item.action == 'toggle_box_mode' then
+        config.box_mode = (config.box_mode == 'unified') and 'per_line' or 'unified'
+        config.preset = 'custom'
+        M.apply_config()
+        mp.osd_message(config.box_mode == 'per_line' and '✓ Layout: Per-Line Pills' or '✓ Layout: Single Unified Capsule', 2)
 
     elseif item.action == 'set_box_radius' and item.val ~= nil then
         config.box_radius = item.val
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message(string.format('✓ Corner Radius: %s', item.val == -1 and 'Full Pill' or (item.val .. 'px')), 2)
+        mp.osd_message(string.format('✓ Curvature: %s', item.val == -1 and 'Full Pill' or (item.val .. 'px')), 2)
 
-    elseif item.action == 'set_box_alpha' and item.val then
-        config.box_alpha = item.val
+    elseif item.action == 'set_box_opacity' and item.val then
+        config.box_opacity = item.val
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message('✓ Box Opacity Updated', 2)
+        mp.osd_message(string.format('✓ Box Opacity: %d%%', math.floor(item.val * 100)), 2)
 
-    elseif item.action == 'toggle_box_rim' then
-        config.box_rim_enabled = not config.box_rim_enabled
+    elseif item.action == 'toggle_glass_rim' then
+        config.glass_rim = not config.glass_rim
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message(config.box_rim_enabled and '✓ Glass Rim: Enabled' or '✓ Glass Rim: Disabled', 2)
+        mp.osd_message(config.glass_rim and '✓ Glass Rim: Enabled' or '✓ Glass Rim: Disabled', 2)
 
-    elseif item.action == 'toggle_per_line' then
-        config.box_per_line = not config.box_per_line
+    elseif item.action == 'set_font_color' and item.hex then
+        config.font_color = item.hex
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message(config.box_per_line and '✓ Pill: Per-Line' or '✓ Pill: Single Unified', 2)
-
-    elseif item.action == 'set_text_color' and item.hex then
-        config.text_color = item.hex
-        config.preset = 'custom'
-        M.apply_config()
-        mp.osd_message('✓ Subtitle Color: ' .. item.hex, 2)
+        mp.osd_message('✓ Subtitle Color: #' .. item.hex, 2)
 
     elseif item.action == 'set_font_size' and item.val then
         config.font_size = item.val
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message(string.format('✓ Subtitle Size: %dpt', item.val), 2)
+        mp.osd_message(string.format('✓ Font Size: %dpt', item.val), 2)
 
     elseif item.action == 'toggle_bold' then
-        config.font_bold = not config.font_bold
+        config.bold = not config.bold
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message(config.font_bold and '✓ Font Weight: Bold' or '✓ Font Weight: Regular', 2)
+        mp.osd_message(config.bold and '✓ Font Weight: Bold' or '✓ Font Weight: Regular', 2)
 
     elseif item.action == 'set_border_size' and item.val ~= nil then
         config.border_size = item.val
         config.preset = 'custom'
         M.apply_config()
-        mp.osd_message(string.format('✓ Border Outline: %.1fpx', item.val), 2)
+        mp.osd_message(string.format('✓ Contour Outline: %.1fpx', item.val), 2)
 
     elseif item.action == 'set_shadow_offset' and item.val ~= nil then
         config.shadow_offset = item.val
@@ -946,8 +1054,8 @@ function M.handle_action(item)
         M.apply_config()
         mp.osd_message(string.format('✓ Shadow Offset: %.1fpx', item.val), 2)
 
-    elseif item.action == 'set_margin_y' and item.val then
-        config.margin_y = item.val
+    elseif item.action == 'set_bottom_margin' and item.val then
+        config.bottom_margin = item.val
         config.preset = 'custom'
         M.apply_config()
         mp.osd_message(string.format('✓ Bottom Margin: %dpx', item.val), 2)
