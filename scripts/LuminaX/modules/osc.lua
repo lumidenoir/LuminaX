@@ -2044,10 +2044,10 @@ function osc_init()
         end
     ne.eventresponder['mbtn_right_up'] =
         function ()
-            if state.menu_active == 'sub' then
+            if state.menu_active == 'sub_config' then
                 menu_close()
             else
-                menu_open('sub')
+                menu_open('sub_config')
             end
         end
     ne.eventresponder['shift+mbtn_left_down'] =

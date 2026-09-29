@@ -25,6 +25,7 @@ state/
 mpv.log
 *.sock
 *.tmp
+script-opts/*.json
 *.bak
 *.orig
 *~

@@ -70,6 +70,9 @@ function M.is_active()
 end
 
 function M.menu_close()
+    if ctx_ref.subtitle and ctx_ref.subtitle.set_live_preview then
+        ctx_ref.subtitle.set_live_preview(false)
+    end
     for _, name in ipairs(menu_key_bindings) do
         mp.remove_key_binding(name)
     end
@@ -231,6 +234,17 @@ function M.menu_get_items()
                 local is_cur = (not sub_off) and (track.selected or (cur_sid ~= nil and track.id == cur_sid))
                 items[i+1] = {label = label, sublabel = sublabel, current = is_cur, index = i, track_id = track.id}
             end
+        end
+        items[#items + 1] = {
+            label = '⚙  Subtitle Styling & Presets...',
+            sublabel = 'Rounded rectangle pill, presets, colors & live fine-tuning',
+            action = 'open_sub_config',
+            current = false,
+            index = #items + 1
+        }
+    elseif state.menu_active and state.menu_active:find('^sub_') then
+        if ctx_ref.subtitle and ctx_ref.subtitle.get_menu_items then
+            items = ctx_ref.subtitle.get_menu_items(state.menu_active)
         end
     elseif state.menu_active == 'chapters' then
         local chapters = mp.get_property_native('chapter-list', {})
@@ -396,8 +410,35 @@ function M.menu_confirm()
             mp.commandv('set', 'aid', tostring(item.track_id))
         end
     elseif state.menu_active == 'sub' then
-        if item.track_id then
+        if item.action == 'open_sub_config' then
+            state.menu_active = 'sub_config'
+            state.menu_selected = 1
+            state.menu_scroll = 0
+            M.invalidate_items()
+            if ctx_ref.subtitle then ctx_ref.subtitle.set_live_preview(true) end
+            if ctx_ref.request_tick then ctx_ref.request_tick() end
+            return
+        elseif item.track_id then
             mp.commandv('set', 'sid', tostring(item.track_id))
+        end
+    elseif state.menu_active and state.menu_active:find('^sub_') then
+        if item.action == 'nav_menu' and item.target then
+            state.menu_active = item.target
+            state.menu_selected = 1
+            state.menu_scroll = 0
+            M.invalidate_items()
+            if state.menu_active == 'sub' then
+                if ctx_ref.subtitle then ctx_ref.subtitle.set_live_preview(false) end
+            else
+                if ctx_ref.subtitle then ctx_ref.subtitle.set_live_preview(true) end
+            end
+            if ctx_ref.request_tick then ctx_ref.request_tick() end
+            return
+        elseif ctx_ref.subtitle and ctx_ref.subtitle.handle_action then
+            ctx_ref.subtitle.handle_action(item)
+            M.invalidate_items()
+            if ctx_ref.request_tick then ctx_ref.request_tick() end
+            return
         end
     elseif state.menu_active == 'tags' then
         M.menu_close()
@@ -638,7 +679,26 @@ function M.menu_open(menu_type)
         M.menu_navigate(1)
     end)
     bind_keys('ENTER', 'enter', 'menu-enter', function() M.menu_confirm() end)
-    bind_keys('ESC', 'esc', 'menu-esc', function() M.menu_close() end)
+    bind_keys('ESC', 'esc', 'menu-esc', function()
+        if state.menu_active and state.menu_active:find('^sub_') and state.menu_active ~= 'sub_config' then
+            state.menu_active = 'sub_config'
+            state.menu_selected = 1
+            state.menu_scroll = 0
+            M.invalidate_items()
+            if ctx_ref.request_tick then ctx_ref.request_tick() end
+        elseif state.menu_active == 'sub_config' then
+            state.menu_active = 'sub'
+            state.menu_selected = 1
+            state.menu_scroll = 0
+            M.invalidate_items()
+            if ctx_ref.subtitle and ctx_ref.subtitle.set_live_preview then
+                ctx_ref.subtitle.set_live_preview(false)
+            end
+            if ctx_ref.request_tick then ctx_ref.request_tick() end
+        else
+            M.menu_close()
+        end
+    end)
     bind_keys('TAB', 'tab', 'menu-tab', function()
         if state.menu_active == 'playlist' and state.playlist_is_series then
             state.playlist_filter_series = not state.playlist_filter_series
@@ -650,6 +710,22 @@ function M.menu_open(menu_type)
             end
             state.menu_selected = cur_i
             state.menu_scroll = math.max(0, cur_i - 5)
+            if ctx_ref.request_tick then ctx_ref.request_tick() end
+        elseif state.menu_active == 'sub' then
+            state.menu_active = 'sub_config'
+            state.menu_selected = 1
+            state.menu_scroll = 0
+            M.invalidate_items()
+            if ctx_ref.subtitle and ctx_ref.subtitle.set_live_preview then
+                ctx_ref.subtitle.set_live_preview(true)
+            end
+            if ctx_ref.request_tick then ctx_ref.request_tick() end
+        elseif state.menu_active and state.menu_active:find('^sub_') then
+            state.menu_active = 'sub'
+            state.menu_selected = 1
+            state.menu_scroll = 0
+            M.invalidate_items()
+            if ctx_ref.subtitle then ctx_ref.subtitle.set_live_preview(false) end
             if ctx_ref.request_tick then ctx_ref.request_tick() end
         end
     end)
@@ -753,7 +829,20 @@ function M.render(ass)
     ass:round_rect_cw(0, 0, menu_w, menu_h, 16)
     ass:draw_stop()
 
-    local titles = {playlist='PLAYLIST', audio='AUDIO TRACKS', sub='SUBTITLES', chapters='CHAPTERS', tags='METADATA & TAGS', tmdb_matches='TMDB MATCHES'}
+    local titles = {
+        playlist     = 'PLAYLIST',
+        audio        = 'AUDIO TRACKS',
+        sub          = 'SUBTITLES',
+        sub_config   = 'SUBTITLE CONFIGURATION',
+        sub_presets  = 'STYLE PRESETS',
+        sub_box      = 'ROUNDED RECTANGLE STYLE',
+        sub_text     = 'TEXT COLOR & TYPOGRAPHY',
+        sub_border   = 'BORDER & SHADOW STYLING',
+        sub_layout   = 'POSITION & SPACING',
+        chapters     = 'CHAPTERS',
+        tags         = 'METADATA & TAGS',
+        tmdb_matches = 'TMDB MATCHES'
+    }
     ass:new_event()
     ass:pos(x0 + 18, y0 + header_h / 2)
     ass:an(4)
@@ -792,8 +881,19 @@ function M.render(ass)
         ass:new_event()
         ass:pos(x0 + menu_w - 18, y0 + header_h / 2)
         ass:an(6)
-        ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs12\\fn%s\\b300\\q2}', font))
-        ass:append(string.format('%d items', total))
+        if state.menu_active == 'sub' then
+            ass:append(string.format('{\\bord0\\blur0\\1c&HFF9500&\\1a&H00&\\fs11\\fn%s\\b600\\q2}', font))
+            ass:append('TAB: Config')
+        elseif state.menu_active == 'sub_config' then
+            ass:append(string.format('{\\bord0\\blur0\\1c&H0A84FF&\\1a&H00&\\fs11\\fn%s\\b600\\q2}', font))
+            ass:append('TAB: Tracks')
+        elseif state.menu_active and state.menu_active:find('^sub_') then
+            ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b600\\q2}', font))
+            ass:append('ESC: Settings')
+        else
+            ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs12\\fn%s\\b300\\q2}', font))
+            ass:append(string.format('%d items', total))
+        end
     end
 
     ass:new_event()

@@ -19,6 +19,7 @@ local huds        = require('modules.huds')
 local tag_editor  = require('modules.tag_editor')
 local menu        = require('modules.menu')
 local screensaver = require('modules.screensaver')
+local subtitle    = require('modules.subtitle')
 
 -- Cross-Module Wireup
 local user_opts   = osc.get_user_opts()
@@ -59,8 +60,17 @@ screensaver.init({
     utils        = utils,
 })
 
--- 3. Initialize Menu
+-- 3. Initialize Subtitle Subsystem
+subtitle.init({
+    utils        = utils,
+    user_opts    = user_opts,
+    osc_param    = osc_param,
+    request_tick = osc.request_tick,
+})
+
+-- 4. Initialize Menu
 menu.init({
+    subtitle          = subtitle,
     state             = state,
     user_opts         = user_opts,
     osc_param         = osc_param,
@@ -89,15 +99,16 @@ menu.init({
     end,
 })
 
--- 4. Initialize OSC
+-- 5. Initialize OSC
 osc.init({
     menu        = menu,
     tag_editor  = tag_editor,
     screensaver = screensaver,
+    subtitle    = subtitle,
     utils       = utils,
 })
 
--- 5. Initialize HUDs
+-- 6. Initialize HUDs
 huds.init({
     icons           = icons,
     get_canvas_size = function() return utils.get_canvas_size(osc_param) end,
@@ -137,6 +148,14 @@ mp.add_key_binding(nil, 'menu-sub', function()
         menu.menu_close()
     else
         menu.menu_open('sub')
+    end
+end)
+
+mp.add_key_binding(nil, 'menu-sub-config', function()
+    if menu.is_active() and state.menu_active == 'sub_config' then
+        menu.menu_close()
+    else
+        menu.menu_open('sub_config')
     end
 end)
 
