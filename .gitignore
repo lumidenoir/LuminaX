@@ -34,6 +34,7 @@ script-opts/*.json
 mpv.conf
 input.conf
 script-opts/*.conf
+script-opts/*.json
 !script-opts/*.def.conf
 !*.def.conf
 *.local.conf
