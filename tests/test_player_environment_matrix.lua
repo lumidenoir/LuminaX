@@ -195,6 +195,25 @@ assert_eq("Navigation selected updated to row 3", nav.selected, 3)
 assert_eq("Click above header returns nil", nav:click(50, 100, 56, 46), nil)
 assert_eq("Click below menu list returns nil", nav:click(500, 100, 56, 46), nil)
 
+-- Right-Hand Side Drawer Geometry calculation (Style A)
+local function calc_drawer_pos(playresx, playresy, items_cnt, row_h, header_h, footer_h)
+    local menu_w = math.max(380, math.min(440, math.floor(playresx * 0.28)))
+    local x0 = playresx - menu_w - 24
+    local menu_h = header_h + items_cnt * row_h + footer_h
+    local y0 = math.max(24, math.floor((playresy - menu_h) / 2))
+    return x0, y0, menu_w, menu_h
+end
+
+local d_x0, d_y0, d_w, d_h = calc_drawer_pos(1920, 1080, 5, 42, 50, 36)
+assert_eq("1080p drawer width is capped at 440", d_w, 440)
+assert_eq("1080p drawer right docked with 24px margin", d_x0, 1920 - 440 - 24)
+assert_eq("1080p drawer height for 5 items", d_h, 50 + 5 * 42 + 36)
+assert_eq("1080p drawer centered vertically", d_y0, math.floor((1080 - d_h) / 2))
+
+local d_x0_720, _, d_w_720, _ = calc_drawer_pos(1280, 720, 4, 42, 50, 36)
+assert_eq("720p drawer width floored at 380", d_w_720, 380)
+assert_eq("720p drawer right docked with 24px margin", d_x0_720, 1280 - 380 - 24)
+
 print("\n=== 4. Testing Cross-Platform Environment Abstractions (Windows vs Linux) ===")
 
 local function get_platform_paths(os_name, env)

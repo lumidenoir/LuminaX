@@ -75,8 +75,8 @@ end
 
 local function is_remote_path(path)
     if not path or path == '' then return true end
-    if ctx_ref.utils and ctx_ref.utils.is_url and ctx_ref.utils.is_url(path) then
-        return true
+    if ctx_ref.utils and ctx_ref.utils.is_url then
+        return ctx_ref.utils.is_url(path)
     end
     return path:find('^%a[%w+.-]*://') ~= nil or path:find('^ytdl://') ~= nil or path:find('^magnet:') ~= nil
 end

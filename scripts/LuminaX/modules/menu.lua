@@ -15,7 +15,6 @@ local menu_bar_last_t   = nil
 local tmdb_matches_list = {}
 local tmdb_searching    = false
 local tmdb_query_str    = ''
-local tag_inspector_boxes = {}
 
 local ctx_ref = {}
 
@@ -121,11 +120,19 @@ local function toggle_night_mode()
     local active = is_night_mode_active()
     if active then
         mp.commandv("af", "remove", "@nightmode")
-        mp.osd_message("Night Mode: Off", 2)
+        if ctx_ref.huds and ctx_ref.huds.show_pill then
+            ctx_ref.huds.show_pill('\238\142\161', 'Dialogue Clarity: Off')
+        else
+            mp.osd_message("Night Mode: Off", 2)
+        end
     else
         local filter_str = "dynaudnorm=f=150:g=15:m=10:p=0.9"
         mp.commandv("af", "add", "@nightmode:lavfi=[" .. filter_str .. "]")
-        mp.osd_message("Night Mode: On (Dialogue Clarity)", 2)
+        if ctx_ref.huds and ctx_ref.huds.show_pill then
+            ctx_ref.huds.show_pill('\238\142\161', 'Dialogue Clarity: On')
+        else
+            mp.osd_message("Night Mode: On (Dialogue Clarity)", 2)
+        end
     end
 end
 
@@ -137,7 +144,6 @@ end
 
 local function reset_audio_delay()
     mp.set_property_number("audio-delay", 0.0)
-    mp.osd_message("Audio Delay: Reset (0 ms)", 2)
 end
 
 local function step_video_prop(prop, delta, min_val, max_val)
@@ -165,21 +171,36 @@ local function cycle_aspect_ratio()
     end
     mp.set_property('video-aspect-override', next_val)
     local names = {['-1'] = 'Auto (16:9)', ['16:9'] = '16:9', ['21:9'] = '21:9 (Ultrawide)', ['4:3'] = '4:3'}
-    mp.osd_message('Aspect Ratio: ' .. (names[next_val] or next_val), 2)
+    local lbl = 'Aspect: ' .. (names[next_val] or next_val)
+    if ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill('\238\136\168', lbl)
+    else
+        mp.osd_message(lbl, 2)
+    end
 end
 
 local function cycle_rotate(dir)
     local cur = mp.get_property_number('video-rotate', 0) or 0
     local next_val = (cur + (dir > 0 and 90 or 270)) % 360
     mp.set_property_number('video-rotate', next_val)
-    mp.osd_message(string.format('Rotate: %d°', next_val), 2)
+    local lbl = string.format('Rotate: %d°', next_val)
+    if ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill('\238\136\168', lbl)
+    else
+        mp.osd_message(lbl, 2)
+    end
 end
 
 local function cycle_deinterlace()
     local cur = mp.get_property('deinterlace', 'no') or 'no'
     local next_val = (cur == 'no') and 'yes' or ((cur == 'yes') and 'auto' or 'no')
     mp.set_property('deinterlace', next_val)
-    mp.osd_message('Deinterlace: ' .. next_val:upper(), 2)
+    local lbl = 'Deinterlace: ' .. next_val:upper()
+    if ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill('\238\136\168', lbl)
+    else
+        mp.osd_message(lbl, 2)
+    end
 end
 
 local function reset_video_settings()
@@ -191,7 +212,11 @@ local function reset_video_settings()
     mp.set_property_number('panscan', 0.0)
     mp.set_property_number('video-rotate', 0)
     mp.set_property('deinterlace', 'no')
-    mp.osd_message('✓ Video settings reset to default', 2)
+    if ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill('\238\136\168', 'Video Settings Reset')
+    else
+        mp.osd_message('✓ Video settings reset to default', 2)
+    end
 end
 
 local function get_tracks_by_type(target_type)
@@ -618,6 +643,7 @@ function M.menu_get_items()
         end
     elseif state.menu_active == 'tags' then
         local utils = ctx_ref.utils
+        local tag_editor = ctx_ref.tag_editor
         local path = mp.get_property('path', '')
         if utils and utils.is_url and utils.is_url(path) then
             items[1] = {
@@ -659,6 +685,15 @@ function M.menu_get_items()
             end
         end
 
+        local auto_reload = tag_editor and tag_editor.get_auto_reload and tag_editor.get_auto_reload() or false
+        local auto_fn = function()
+            if tag_editor and tag_editor.set_auto_reload then
+                tag_editor.set_auto_reload(not auto_reload)
+                M.invalidate_items()
+                if ctx_ref.request_tick then ctx_ref.request_tick() end
+            end
+        end
+
         if state.tag_inspector_confirm then
             items[1] = {
                 label = 'Confirm & Apply',
@@ -668,14 +703,14 @@ function M.menu_get_items()
             }
             items[2] = {
                 label = 'Cancel',
-                sublabel = 'Return to Inspector without modifying other files',
+                sublabel = 'Return to Tag Editor without modifying other files',
                 action = 'confirm_batch_no',
                 index = 2
             }
             return items
         end
 
-        -- Section 2: Smart Quick-Fix Cards
+        -- Section 1: Smart Quick-Fix Actions
         items[1] = {
             label = 'Clean Watermarks & Ads',
             sublabel = 'Strips URLs, encoders & track promo labels',
@@ -698,7 +733,7 @@ function M.menu_get_items()
             role = 'smart_card'
         }
 
-        -- Section 3: Inline Manual Editor
+        -- Section 2: Inline Manual Editor
         items[4] = {
             label = 'Manual Title Input',
             sublabel = state.tag_inspector_input or cur_title,
@@ -714,46 +749,35 @@ function M.menu_get_items()
             role = 'manual_save'
         }
 
-        -- Section 4: Advanced Tools
+        -- Section 3: Folder & Directory Operations (Always Shown)
         items[6] = {
-            label = state.tag_inspector_expanded and 'Advanced & Folder Tools [Collapse ▴]' or 'Advanced & Folder Tools [Expand Tools ▾]',
-            sublabel = 'Batch operations & multi-file header tools',
-            action = 'toggle_advanced',
+            label = string.format('Batch Apply Title to Season Folder (%d files)', mkv_count),
+            sublabel = 'Update header title for all MKV episodes in season directory',
+            action = 'prompt_batch_apply',
             index = 6,
-            role = 'advanced_toggle'
+            role = 'batch_tool'
+        }
+        items[7] = {
+            label = 'Strip All Header Titles in Directory [⚠ Danger Zone]',
+            sublabel = 'Remove title tags from all video files in directory',
+            action = 'prompt_batch_strip',
+            index = 7,
+            role = 'batch_tool'
         }
 
-        if state.tag_inspector_expanded then
-            items[7] = {
-                label = string.format('Batch Apply Title to Season Folder (%d files)', mkv_count),
-                sublabel = 'Update header title for all MKV episodes in season directory',
-                action = 'prompt_batch_apply',
-                index = 7,
-                role = 'batch_tool'
-            }
-            items[8] = {
-                label = 'Strip All Header Titles in Directory [⚠ Danger Zone]',
-                sublabel = 'Remove title tags from all video files in directory',
-                action = 'prompt_batch_strip',
-                index = 8,
-                role = 'batch_tool'
-            }
-            items[9] = {
-                label = 'Auto-reload playback after saving disk changes',
-                sublabel = 'Seamlessly reload file at current second to update mpv track list',
-                action = 'toggle_autoreload',
-                index = 9,
-                role = 'auto_reload'
-            }
-        else
-            items[7] = {
-                label = 'Auto-reload playback after saving disk changes',
-                sublabel = 'Seamlessly reload file at current second to update mpv track list',
-                action = 'toggle_autoreload',
-                index = 7,
-                role = 'auto_reload'
-            }
-        end
+        -- Section 4: Configuration & Automation (Always Shown)
+        items[8] = {
+            label = 'Auto-reload playback after saving disk changes',
+            sublabel = 'Seamlessly reload file at current second to update mpv track list',
+            type = 'stepper',
+            value = auto_reload and 'On' or 'Off',
+            current = auto_reload,
+            action = 'toggle_autoreload',
+            on_prev = auto_fn,
+            on_next = auto_fn,
+            index = 8,
+            role = 'auto_reload'
+        }
     elseif state.menu_active == 'tmdb_matches' then
         if tmdb_searching then
             items[1] = {
@@ -794,51 +818,8 @@ end
 
 function M.menu_navigate(dir)
     local state = ctx_ref.state
-    if state.menu_active == 'tags' then
-        local items = M.menu_get_items()
-        local count = #items
-        if count == 0 then return end
-        if state.tag_inspector_confirm then
-            state.menu_selected = (state.menu_selected == 1) and 2 or 1
-            if ctx_ref.request_tick then ctx_ref.request_tick() end
-            return
-        end
-        local sel = state.menu_selected
-        local expanded = state.tag_inspector_expanded == true
-        if dir > 0 then
-            if sel >= 1 and sel <= 3 then
-                sel = 4
-            elseif sel == 4 or sel == 5 then
-                sel = 6
-            elseif sel == 6 then
-                sel = 7
-            elseif sel == 7 then
-                sel = expanded and 8 or 1
-            elseif sel == 8 then
-                sel = expanded and 9 or 1
-            elseif sel >= 9 then
-                sel = 1
-            else
-                sel = 1
-            end
-        else
-            if sel >= 1 and sel <= 3 then
-                sel = expanded and 9 or 7
-            elseif sel == 4 or sel == 5 then
-                sel = 1
-            elseif sel == 6 then
-                sel = 4
-            elseif sel == 7 then
-                sel = 6
-            elseif sel == 8 then
-                sel = 7
-            elseif sel >= 9 then
-                sel = 8
-            else
-                sel = 1
-            end
-        end
-        state.menu_selected = math.max(1, math.min(count, sel))
+    if state.menu_active == 'tags' and state.tag_inspector_confirm then
+        state.menu_selected = (state.menu_selected == 1) and 2 or 1
         if ctx_ref.request_tick then ctx_ref.request_tick() end
         return
     end
@@ -1046,10 +1027,6 @@ function M.menu_confirm()
                     if ctx_ref.request_tick then ctx_ref.request_tick() end
                 end)
             end
-        elseif item.action == 'toggle_advanced' then
-            state.tag_inspector_expanded = not (state.tag_inspector_expanded == true)
-            M.invalidate_items()
-            if ctx_ref.request_tick then ctx_ref.request_tick() end
         elseif item.action == 'prompt_batch_apply' then
             local fn = mp.get_property('filename') or ''
             local show, s_num, e_num, year = utils.parse_clean_title(nil, fn)
@@ -1097,11 +1074,21 @@ function M.menu_confirm()
             state.menu_selected = 6
             M.invalidate_items()
             if ctx_ref.request_tick then ctx_ref.request_tick() end
-        elseif item.action == 'toggle_autoreload' then
-            local cur = tag_editor.get_auto_reload and tag_editor.get_auto_reload() or false
-            if tag_editor.set_auto_reload then
-                tag_editor.set_auto_reload(not cur)
+        elseif item.action == 'toggle_autoreload' or item.role == 'auto_reload' then
+            local te = ctx_ref.tag_editor or tag_editor
+            local cur
+            if te and te.get_auto_reload then
+                cur = te.get_auto_reload()
+            elseif state.tag_editor_auto_reload ~= nil then
+                cur = state.tag_editor_auto_reload
+            else
+                cur = true
             end
+            local next_val = not cur
+            if te and te.set_auto_reload then
+                te.set_auto_reload(next_val)
+            end
+            state.tag_editor_auto_reload = next_val
             M.invalidate_items()
             if ctx_ref.request_tick then ctx_ref.request_tick() end
         end
@@ -1136,32 +1123,8 @@ function M.menu_confirm()
     M.menu_close()
 end
 
-function M.menu_handle_click()
-    local state = ctx_ref.state
-    if not state.menu_active then return end
-    local mx, my = ctx_ref.get_virt_mouse_pos()
-
-    if state.menu_active == 'tags' then
-        if tag_inspector_boxes['close'] then
-            local b = tag_inspector_boxes['close']
-            if mx >= b.x1 and mx <= b.x2 and my >= b.y1 and my <= b.y2 then
-                M.menu_close()
-                return
-            end
-        end
-        for idx, b in pairs(tag_inspector_boxes) do
-            if type(idx) == 'number' and mx >= b.x1 and mx <= b.x2 and my >= b.y1 and my <= b.y2 then
-                state.menu_selected = idx
-                M.menu_confirm()
-                return
-            end
-        end
-        return
-    end
-
-    local items  = M.menu_get_items()
-    local is_pl  = (state.menu_active == 'playlist')
-    local osc_param = ctx_ref.osc_param
+local function calculate_menu_layout(state, items, osc_param)
+    local is_pl = (state.menu_active == 'playlist')
     local is_sub_menu = state.menu_active and (
         state.menu_active:find('^sub_') ~= nil or
         state.menu_active == 'sub'
@@ -1169,71 +1132,140 @@ function M.menu_handle_click()
     local is_drawer = state.menu_active and (
         is_sub_menu or
         state.menu_active == 'audio' or
-        state.menu_active == 'video'
+        state.menu_active == 'video' or
+        state.menu_active == 'chapters' or
+        state.menu_active == 'tags'
     )
 
-    local menu_w, row_h, header_h, footer_h, pad_bot, x0, y0, visible_max, scroll, vis, menu_h
-    local is_searchable = not is_drawer and (state.menu_active == 'playlist' or state.menu_active == 'chapters') and (state.menu_searchable == true or (state.menu_searchable == nil and #items > 5))
+    local is_searchable = not is_drawer and is_pl and (state.menu_searchable == true or (state.menu_searchable == nil and #items > 5))
     local search_h = is_searchable and 42 or 0
 
+    local has_any_sublabel = false
+    if state.menu_active ~= 'chapters' then
+        for _, item in ipairs(items) do
+            if item.sublabel and item.sublabel ~= '' then
+                has_any_sublabel = true
+                break
+            end
+        end
+    end
+
+    local menu_w, row_h, header_h, footer_h, visible_max, scroll, vis, menu_h, x0, y0
+    local num_x, text_x
+
     if is_drawer then
-        menu_w    = math.max(360, math.min(420, math.floor(osc_param.playresx * 0.30)))
-        local has_any_sublabel = false
-        for _, item in ipairs(items) do
-            if item.sublabel and item.sublabel ~= '' then
-                has_any_sublabel = true
-                break
-            end
-        end
+        menu_w = math.max(380, math.min(440, math.floor(osc_param.playresx * 0.28)))
         local is_video_menu = (state.menu_active == 'video')
-        row_h     = is_video_menu and 34 or (has_any_sublabel and 52 or 40)
-        header_h  = 48
-        footer_h  = 34
-        pad_bot   = 0
-        local cx  = math.floor(osc_param.playresx / 2)
-        local cy  = math.floor(osc_param.playresy / 2)
-        local y_safe_top = is_sub_menu and 22 or 24
-        local y_safe_bot = is_sub_menu and math.floor(osc_param.playresy * 0.78) or (osc_param.playresy - 24)
-        visible_max = math.max(1, math.floor((y_safe_bot - y_safe_top - header_h - footer_h) / row_h))
-        scroll    = state.menu_scroll or 0
-        vis       = math.min(#items - scroll, visible_max)
-        menu_h    = header_h + vis * row_h + footer_h
-        if is_sub_menu then
-            x0    = math.max(20, math.floor(osc_param.playresx * 0.02))
-            y0    = y_safe_top
-        else
-            x0    = math.floor(cx - menu_w / 2)
-            y0    = math.max(y_safe_top, math.floor(cy - menu_h / 2))
-        end
-    else
-        local is_wide = is_pl or (state.menu_active == 'chapters') or (state.menu_active == 'tags') or (state.menu_active == 'tmdb_matches')
-        menu_w = is_wide and math.min(920, math.floor(osc_param.playresx * 0.90)) or math.min(740, math.floor(osc_param.playresx * 0.88))
-        local has_any_sublabel = false
-        for _, item in ipairs(items) do
-            if item.sublabel and item.sublabel ~= '' then
-                has_any_sublabel = true
-                break
-            end
-        end
-        row_h    = (is_pl or state.menu_active == 'tags' or has_any_sublabel) and 60 or 46
-        header_h = 56
+        row_h = is_video_menu and 40 or (has_any_sublabel and 52 or 42)
+        header_h = 50
         footer_h = 36
-        pad_bot  = 0
+        num_x = 24
+        text_x = 20
+
+        local y_safe_top = 24
+        local y_safe_bot = osc_param.playresy - 24
+        local max_h = y_safe_bot - y_safe_top
+        visible_max = math.max(1, math.floor((max_h - header_h - footer_h) / row_h))
+
+        scroll = state.menu_scroll or 0
+        if scroll < 0 then scroll = 0 end
+        if state.menu_selected - scroll > visible_max then
+            scroll = state.menu_selected - visible_max
+        elseif state.menu_selected - scroll < 1 then
+            scroll = state.menu_selected - 1
+        end
+        if scroll < 0 then scroll = 0 end
+        state.menu_scroll = scroll
+
+        local total = #items
+        vis = math.min(total - scroll, visible_max)
+        menu_h = header_h + vis * row_h + footer_h
+
+        -- Right-docked side drawer (Style A)
+        x0 = osc_param.playresx - menu_w - 24
+        y0 = math.max(y_safe_top, math.floor((osc_param.playresy - menu_h) / 2))
+    else
+        local is_wide = is_pl or (state.menu_active == 'tmdb_matches')
+        menu_w = is_wide and math.min(740, math.floor(osc_param.playresx * 0.76)) or math.min(700, math.floor(osc_param.playresx * 0.80))
+        local pad_left = 20
+        row_h = (is_pl or has_any_sublabel) and 58 or 46
+        header_h = 50
+        footer_h = 36
+        num_x = 32
+        text_x = pad_left + 46
+
         local y_safe_top = 24
         local y_safe_bot = osc_param.playresy - 24
         visible_max = math.max(1, math.min(
-            (is_pl or state.menu_active == 'chapters') and 8 or 7,
+            is_pl and 8 or 7,
             math.floor((y_safe_bot - y_safe_top - header_h - search_h - footer_h) / row_h)
         ))
+
         scroll = state.menu_scroll or 0
-        vis    = math.min(#items - scroll, visible_max)
+        if scroll < 0 then scroll = 0 end
+        if state.menu_selected - scroll > visible_max then
+            scroll = state.menu_selected - visible_max
+        elseif state.menu_selected - scroll < 1 then
+            scroll = state.menu_selected - 1
+        end
+        if scroll < 0 then scroll = 0 end
+        state.menu_scroll = scroll
+
+        local total = #items
+        vis = math.min(total - scroll, visible_max)
         local card_vis = is_searchable and math.max(vis, math.min(6, visible_max)) or vis
         menu_h = header_h + search_h + card_vis * row_h + footer_h
+
         local cx = math.floor(osc_param.playresx / 2)
         local cy = math.floor(osc_param.playresy / 2)
         x0 = math.floor(cx - menu_w / 2)
         y0 = math.max(y_safe_top, math.floor(cy - menu_h / 2))
     end
+
+    return {
+        is_drawer = is_drawer,
+        is_searchable = is_searchable,
+        is_pl = is_pl,
+        is_sub_menu = is_sub_menu,
+        menu_w = menu_w,
+        menu_h = menu_h,
+        row_h = row_h,
+        header_h = header_h,
+        footer_h = footer_h,
+        search_h = search_h,
+        visible_max = visible_max,
+        scroll = scroll,
+        vis = vis,
+        x0 = x0,
+        y0 = y0,
+        num_x = num_x,
+        text_x = text_x,
+        total = #items,
+    }
+end
+
+function M.menu_handle_click()
+    local state = ctx_ref.state
+    if not state.menu_active then return end
+    local mx, my = ctx_ref.get_virt_mouse_pos()
+
+
+
+    local items  = M.menu_get_items()
+    local osc_param = ctx_ref.osc_param or {playresx = 1280, playresy = 720}
+    local l = calculate_menu_layout(state, items, osc_param)
+
+    local is_drawer = l.is_drawer
+    local is_searchable = l.is_searchable
+    local menu_w = l.menu_w
+    local menu_h = l.menu_h
+    local row_h = l.row_h
+    local header_h = l.header_h
+    local search_h = l.search_h
+    local x0 = l.x0
+    local y0 = l.y0
+    local scroll = l.scroll
+    local vis = l.vis
 
     if mx < x0 or mx > x0 + menu_w or my < y0 or my > y0 + menu_h then
         M.menu_close()
@@ -1457,19 +1489,8 @@ function M.menu_open(menu_type)
     end)
     bind_keys('LEFT', 'left', 'menu-left', function()
         if ctx_ref.inhibit_screensaver then ctx_ref.inhibit_screensaver() end
-        if state.menu_active == 'tags' then
-            if state.tag_inspector_confirm then
-                state.menu_selected = (state.menu_selected == 1) and 2 or 1
-                if ctx_ref.request_tick then ctx_ref.request_tick() end
-                return
-            end
-            local sel = state.menu_selected
-            if sel == 2 then state.menu_selected = 1
-            elseif sel == 3 then state.menu_selected = 2
-            elseif sel == 1 then state.menu_selected = 3
-            elseif sel == 5 then state.menu_selected = 4
-            elseif sel == 4 then state.menu_selected = 5
-            end
+        if state.menu_active == 'tags' and state.tag_inspector_confirm then
+            state.menu_selected = (state.menu_selected == 1) and 2 or 1
             if ctx_ref.request_tick then ctx_ref.request_tick() end
             return
         end
@@ -1484,19 +1505,8 @@ function M.menu_open(menu_type)
     end)
     bind_keys('RIGHT', 'right', 'menu-right', function()
         if ctx_ref.inhibit_screensaver then ctx_ref.inhibit_screensaver() end
-        if state.menu_active == 'tags' then
-            if state.tag_inspector_confirm then
-                state.menu_selected = (state.menu_selected == 1) and 2 or 1
-                if ctx_ref.request_tick then ctx_ref.request_tick() end
-                return
-            end
-            local sel = state.menu_selected
-            if sel == 1 then state.menu_selected = 2
-            elseif sel == 2 then state.menu_selected = 3
-            elseif sel == 3 then state.menu_selected = 1
-            elseif sel == 4 then state.menu_selected = 5
-            elseif sel == 5 then state.menu_selected = 4
-            end
+        if state.menu_active == 'tags' and state.tag_inspector_confirm then
+            state.menu_selected = (state.menu_selected == 1) and 2 or 1
             if ctx_ref.request_tick then ctx_ref.request_tick() end
             return
         end
@@ -1588,450 +1598,6 @@ function M.menu_open(menu_type)
     if ctx_ref.request_tick then ctx_ref.request_tick() end
 end
 
--- Inspector-Style Centered Modal for Tag Editor
-local function render_tag_inspector(ass, osc_param, font, eff_alpha, items)
-    tag_inspector_boxes = {}
-    local state = ctx_ref.state
-    local utils = ctx_ref.utils
-    local tag_editor = ctx_ref.tag_editor
-    local auto_reload = tag_editor and tag_editor.get_auto_reload and tag_editor.get_auto_reload() or false
-
-    local menu_w = math.min(860, math.floor(osc_param.playresx * 0.92))
-    local expanded = (state.tag_inspector_expanded == true)
-    local is_confirm = (state.tag_inspector_confirm ~= nil)
-
-    local header_h = 46
-    local health_h = 92
-    local smart_h  = 102
-    local manual_h = 66
-    local adv_h    = expanded and 112 or 36
-    local auto_h   = 36
-    local pad_bot  = 14
-    local menu_h   = header_h + health_h + smart_h + manual_h + adv_h + auto_h + pad_bot
-    if is_confirm then
-        menu_h = 240
-    end
-
-    local x0 = math.floor((osc_param.playresx - menu_w) / 2)
-    local y0 = math.max(16, math.floor((osc_param.playresy - menu_h) / 2))
-
-    local dim_a = string.format('%02X', math.floor(255 - (110 * eff_alpha / 255)))
-    local pan_a = string.format('%02X', math.floor(255 - (230 * eff_alpha / 255)))
-
-    -- Dimmer
-    ass:new_event()
-    ass:pos(0, 0)
-    ass:an(7)
-    ass:append('{\\bord0\\blur0\\1c&H000000&\\1a&H' .. dim_a .. '&}')
-    ass:draw_start()
-    ass:rect_cw(0, 0, osc_param.playresx, osc_param.playresy)
-    ass:draw_stop()
-
-    -- Modal panel
-    ass:new_event()
-    ass:pos(x0, y0)
-    ass:an(7)
-    ass:append('{\\bord1.2\\blur0.5\\1c&H161614&\\3c&HFFFFFF&\\3a&HD0&\\1a&H' .. pan_a .. '&}')
-    ass:draw_start()
-    ass:round_rect_cw(0, 0, menu_w, menu_h, 16)
-    ass:draw_stop()
-
-    if is_confirm then
-        ass:new_event()
-        ass:pos(x0 + menu_w / 2, y0 + 36)
-        ass:an(5)
-        ass:append(string.format('{\\bord0\\blur0\\1c&H0095FF&\\fs14\\fn%s\\b700\\fsp1}⚠ CONFIRM BATCH OPERATION', font))
-
-        local msg = state.tag_inspector_confirm_msg or 'Are you sure you want to perform this batch operation?'
-        ass:new_event()
-        ass:pos(x0 + menu_w / 2, y0 + 80)
-        ass:an(5)
-        ass:append(string.format('{\\bord0\\blur0\\1c&HE0E0E0&\\fs12\\fn%s\\b500}%s', font, utils and utils.ass_escape(msg) or msg))
-
-        ass:new_event()
-        ass:pos(x0 + menu_w / 2, y0 + 110)
-        ass:an(5)
-        ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\fs10\\fn%s}This will write directly to Matroska file headers on disk.', font))
-
-        local btn_w = 190
-        local btn_h = 38
-        local btn_y = y0 + 150
-        local b1_x = x0 + menu_w / 2 - btn_w - 16
-        local b2_x = x0 + menu_w / 2 + 16
-
-        local sel1 = (state.menu_selected == 1)
-        tag_inspector_boxes[1] = { x1 = b1_x, y1 = btn_y, x2 = b1_x + btn_w, y2 = btn_y + btn_h }
-        ass:new_event()
-        ass:pos(b1_x, btn_y)
-        ass:an(7)
-        local b1_fill = sel1 and '&H1818E0&' or '&H1818A0&'
-        local b1_bord = sel1 and '&H7080FF&' or '&H3030D0&'
-        ass:append('{\\bord' .. (sel1 and '2.0' or '1.0') .. '\\1c' .. b1_fill .. '\\3c' .. b1_bord .. '\\1a&H00&}')
-        ass:draw_start()
-        ass:round_rect_cw(0, 0, btn_w, btn_h, 8)
-        ass:draw_stop()
-        ass:new_event()
-        ass:pos(b1_x + btn_w / 2, btn_y + btn_h / 2)
-        ass:an(5)
-        ass:append(string.format('{\\bord0\\1c&HFFFFFF&\\fs12\\fn%s\\b800}Confirm & Apply', font))
-
-        local sel2 = (state.menu_selected == 2)
-        tag_inspector_boxes[2] = { x1 = b2_x, y1 = btn_y, x2 = b2_x + btn_w, y2 = btn_y + btn_h }
-        ass:new_event()
-        ass:pos(b2_x, btn_y)
-        ass:an(7)
-        local b2_fill = sel2 and '&H555550&' or '&H222220&'
-        local b2_bord = sel2 and '&HFFFFFF&' or '&H333330&'
-        ass:append('{\\bord' .. (sel2 and '2.0' or '1.0') .. '\\1c' .. b2_fill .. '\\3c' .. b2_bord .. '\\1a&H00&}')
-        ass:draw_start()
-        ass:round_rect_cw(0, 0, btn_w, btn_h, 8)
-        ass:draw_stop()
-        ass:new_event()
-        ass:pos(b2_x + btn_w / 2, btn_y + btn_h / 2)
-        ass:an(5)
-        ass:append(string.format('{\\bord0\\1c&HFFFFFF&\\fs12\\fn%s\\b700}Cancel', font))
-
-        return
-    end
-
-    -- Header Bar
-    ass:new_event()
-    ass:pos(x0 + 24, y0 + 24)
-    ass:an(4)
-    ass:append(string.format('{\\bord0\\blur0\\1c&HFFFFFF&\\fs12\\fn%s\\b700\\fsp2}METADATA & TAG INSPECTOR', font))
-
-    -- [Esc] ✕ Button
-    local esc_w, esc_h = 58, 24
-    local esc_x = x0 + menu_w - esc_w - 20
-    local esc_y = y0 + 12
-    tag_inspector_boxes['close'] = { x1 = esc_x, y1 = esc_y, x2 = esc_x + esc_w, y2 = esc_y + esc_h }
-    ass:new_event()
-    ass:pos(esc_x, esc_y)
-    ass:an(7)
-    ass:append('{\\bord1\\1c&H20201E&\\3c&H3A3A38&\\1a&H30&}')
-    ass:draw_start()
-    ass:round_rect_cw(0, 0, esc_w, esc_h, 6)
-    ass:draw_stop()
-    ass:new_event()
-    ass:pos(esc_x + esc_w / 2, esc_y + esc_h / 2)
-    ass:an(5)
-    ass:append(string.format('{\\bord0\\1c&H8E8E93&\\fs10\\fn%s\\b600}[Esc] ✕', font))
-
-    -- Divider
-    ass:new_event()
-    ass:pos(0, 0)
-    ass:an(7)
-    ass:append('{\\bord0\\1c&H282826&\\1a&H20&}')
-    ass:draw_start()
-    ass:rect_cw(x0 + 20, y0 + 44, x0 + menu_w - 20, y0 + 45)
-    ass:draw_stop()
-
-    -- Section 1: The Status & Health Card
-    local cx = x0 + 20
-    local cy = y0 + 54
-    local cw = menu_w - 40
-    local ch = 88
-
-    ass:new_event()
-    ass:pos(cx, cy)
-    ass:an(7)
-    ass:append('{\\bord1\\blur0.3\\1c&H1A1A18&\\3c&H2C2C2A&\\1a&H10&}')
-    ass:draw_start()
-    ass:round_rect_cw(0, 0, cw, ch, 10)
-    ass:draw_stop()
-
-    local raw_fn = mp.get_property('filename') or ''
-    local raw_title = mp.get_property('media-title') or ''
-    local tracks = mp.get_property_native('track-list', {})
-    local v_cnt, a_cnt, s_cnt = 0, 0, 0
-    local a_ads, s_ads = 0, 0
-    for _, t in ipairs(tracks) do
-        local is_j = t.title and utils and (utils.is_junk_title(t.title) or t.title:lower():find('1tamilmv') or t.title:lower():find('tamilblasters') or t.title:lower():find('as%-encodes'))
-        if t.type == 'video' then
-            v_cnt = v_cnt + 1
-        elseif t.type == 'audio' then
-            a_cnt = a_cnt + 1
-            if is_j then a_ads = a_ads + 1 end
-        elseif t.type == 'sub' then
-            s_cnt = s_cnt + 1
-            if is_j then s_ads = s_ads + 1 end
-        end
-    end
-    local title_is_junk = (raw_title ~= '' and raw_title ~= raw_fn and utils and utils.is_junk_title(raw_title))
-    local is_watermarked = title_is_junk or (a_ads > 0) or (s_ads > 0)
-
-    -- Badge on Right
-    if is_watermarked then
-        local bw = 210
-        local bh = 24
-        local bx = cx + cw - bw - 14
-        local by = cy + 12
-        ass:new_event()
-        ass:pos(bx, by)
-        ass:an(7)
-        ass:append('{\\bord1\\1c&H1C142A&\\3c&H3040E0&\\1a&H10&}')
-        ass:draw_start()
-        ass:round_rect_cw(0, 0, bw, bh, 6)
-        ass:draw_stop()
-        ass:new_event()
-        ass:pos(bx + bw / 2, by + bh / 2)
-        ass:an(5)
-        ass:append(string.format('{\\bord0\\1c&H5060FF&\\fs10\\fn%s\\b700}⚠ Promo Watermarks Detected', font))
-    else
-        local bw = 84
-        local bh = 24
-        local bx = cx + cw - bw - 14
-        local by = cy + 12
-        ass:new_event()
-        ass:pos(bx, by)
-        ass:an(7)
-        ass:append('{\\bord1\\1c&H142618&\\3c&H2ECC71&\\1a&H10&}')
-        ass:draw_start()
-        ass:round_rect_cw(0, 0, bw, bh, 6)
-        ass:draw_stop()
-        ass:new_event()
-        ass:pos(bx + bw / 2, by + bh / 2)
-        ass:an(5)
-        ass:append(string.format('{\\bord0\\1c&H71CC2E&\\fs10\\fn%s\\b700}✓ Clean', font))
-    end
-
-    local disp_fn = raw_fn
-    if #disp_fn > 68 then disp_fn = disp_fn:sub(1, 65) .. '...' end
-    local disp_title = (raw_title ~= '' and raw_title ~= raw_fn) and ('"' .. raw_title .. '"') or '(No Title Tag Set)'
-    if #disp_title > 68 then disp_title = disp_title:sub(1, 65) .. '..."' end
-
-    ass:new_event()
-    ass:pos(cx + 14, cy + 18)
-    ass:an(4)
-    ass:append(string.format('{\\bord0\\1c&H8E8E93&\\fs10.5\\fn%s\\b700}File:  {\\1c&HE0E0E0&\\b400}%s', font, utils and utils.ass_escape(disp_fn) or disp_fn))
-
-    ass:new_event()
-    ass:pos(cx + 14, cy + 42)
-    ass:an(4)
-    local title_c = title_is_junk and '&H5060FF&' or '&HFFFFFF&'
-    ass:append(string.format('{\\bord0\\1c&H8E8E93&\\fs10.5\\fn%s\\b700}Title:  {\\1c%s\\b700}%s', font, title_c, utils and utils.ass_escape(disp_title) or disp_title))
-
-    local trk_info = string.format('%d Video  •  %d Audio%s  •  %d Subtitles%s',
-        v_cnt,
-        a_cnt, (a_ads > 0 and (' {\\1c&H5060FF&}[' .. a_ads .. ' Tagged Ads]{\\1c&H8E8E93&}') or ''),
-        s_cnt, (s_ads > 0 and (' {\\1c&H5060FF&}[' .. s_ads .. ' Tagged Ads]{\\1c&H8E8E93&}') or '')
-    )
-    if a_ads == 0 and s_ads == 0 then
-        trk_info = trk_info .. '  {\\1c&H71CC2E&}[All Clean]{\\1c&H8E8E93&}'
-    end
-    ass:new_event()
-    ass:pos(cx + 14, cy + 66)
-    ass:an(4)
-    ass:append(string.format('{\\bord0\\1c&H8E8E93&\\fs10.5\\fn%s\\b700}Tracks:  {\\b500}%s', font, trk_info))
-
-    -- Section 2: Smart Actions
-    local s2_y = cy + ch + 12
-    ass:new_event()
-    ass:pos(x0 + 24, s2_y + 8)
-    ass:an(4)
-    ass:append(string.format('{\\bord0\\1c&H7A7A80&\\fs9\\fn%s\\b700\\fsp2}SMART ACTIONS (ONE-CLICK)', font))
-
-    local cards_y = s2_y + 20
-    local card_gap = 12
-    local card_w = math.floor((cw - 2 * card_gap) / 3)
-    local card_h = 74
-
-    for i = 1, 3 do
-        local it = items[i]
-        if it then
-            local card_x = cx + (i - 1) * (card_w + card_gap)
-            local is_sel = (state.menu_selected == i)
-            tag_inspector_boxes[i] = { x1 = card_x, y1 = cards_y, x2 = card_x + card_w, y2 = cards_y + card_h }
-
-            ass:new_event()
-            ass:pos(card_x, cards_y)
-            ass:an(7)
-            local c_fill = is_sel and '&H8A551E&' or '&H1D1D1B&'
-            local c_bord = is_sel and '&HFFE860&' or '&H30302E&'
-            if i == 1 then
-                c_fill = is_sel and '&H9E6422&' or '&H221F1C&'
-                c_bord = is_sel and '&HFFFFFF&' or '&H4A3A2C&'
-            end
-            ass:append('{\\bord' .. (is_sel and '2.0' or '1.0') .. '\\1c' .. c_fill .. '\\3c' .. c_bord .. '\\1a&H00&}')
-            ass:draw_start()
-            ass:round_rect_cw(0, 0, card_w, card_h, 8)
-            ass:draw_stop()
-
-            ass:new_event()
-            ass:pos(card_x + 14, cards_y + 24)
-            ass:an(4)
-            local t_color = is_sel and '&HFFFFFF&' or (i == 1 and '&H64D2FF&' or '&HEAEAEA&')
-            local t_weight = is_sel and '\\b800' or '\\b700'
-            ass:append(string.format('{\\bord0\\1c%s\\fs11.5\\fn%s%s}%s', t_color, font, t_weight, utils and utils.ass_escape(it.label) or it.label))
-
-            ass:new_event()
-            ass:pos(card_x + 14, cards_y + 48)
-            ass:an(4)
-            local sub_txt = it.sublabel or ''
-            if #sub_txt > 36 then sub_txt = sub_txt:sub(1, 33) .. '...' end
-            local s_color = is_sel and '&HE8E8F0&' or '&H8E8E93&'
-            local s_weight = is_sel and '\\b500' or '\\b400'
-            ass:append(string.format('{\\bord0\\1c%s\\fs9.5\\fn%s%s}%s', s_color, font, s_weight, utils and utils.ass_escape(sub_txt) or sub_txt))
-        end
-    end
-
-    -- Section 3: Inline Manual Editor
-    local s3_y = cards_y + card_h + 12
-    ass:new_event()
-    ass:pos(x0 + 24, s3_y + 8)
-    ass:an(4)
-    ass:append(string.format('{\\bord0\\1c&H7A7A80&\\fs9\\fn%s\\b700\\fsp2}MANUAL EDIT', font))
-
-    local edit_y = s3_y + 20
-    local save_btn_w = 138
-    local input_box_w = cw - save_btn_w - 12
-    local edit_h = 38
-
-    local is_input_sel = (state.menu_selected == 4)
-    tag_inspector_boxes[4] = { x1 = cx, y1 = edit_y, x2 = cx + input_box_w, y2 = edit_y + edit_h }
-    ass:new_event()
-    ass:pos(cx, edit_y)
-    ass:an(7)
-    local inp_fill = is_input_sel and '&H5A3E26&' or '&H141412&'
-    local inp_bord = is_input_sel and '&HFFE860&' or '&H333330&'
-    ass:append('{\\bord' .. (is_input_sel and '2.0' or '1.0') .. '\\1c' .. inp_fill .. '\\3c' .. inp_bord .. '\\1a&H00&}')
-    ass:draw_start()
-    ass:round_rect_cw(0, 0, input_box_w, edit_h, 8)
-    ass:draw_stop()
-
-    local manual_val = state.tag_inspector_input or (raw_title ~= '' and raw_title or raw_fn:gsub('%.%w+$', ''))
-    if #manual_val > 72 then manual_val = manual_val:sub(1, 69) .. '...' end
-    ass:new_event()
-    ass:pos(cx + 14, edit_y + edit_h / 2)
-    ass:an(4)
-    local title_pfx_col = is_input_sel and '&HFFE860&' or '&H8E8E93&'
-    ass:append(string.format('{\\bord0\\1c%s\\fs10.5\\fn%s\\b700}Title:  {\\1c&HFFFFFF&\\fs11\\b%s}%s', title_pfx_col, font, is_input_sel and '700' or '500', utils and utils.ass_escape(manual_val) or manual_val))
-
-    local save_x = cx + input_box_w + 12
-    local is_save_sel = (state.menu_selected == 5)
-    tag_inspector_boxes[5] = { x1 = save_x, y1 = edit_y, x2 = save_x + save_btn_w, y2 = edit_y + edit_h }
-    ass:new_event()
-    ass:pos(save_x, edit_y)
-    ass:an(7)
-    local s_fill = is_save_sel and '&HFF8C14&' or '&H2A2A26&'
-    local s_bord = is_save_sel and '&HFFFFFF&' or '&H444440&'
-    ass:append('{\\bord' .. (is_save_sel and '2.0' or '1.0') .. '\\1c' .. s_fill .. '\\3c' .. s_bord .. '\\1a&H00&}')
-    ass:draw_start()
-    ass:round_rect_cw(0, 0, save_btn_w, edit_h, 8)
-    ass:draw_stop()
-    ass:new_event()
-    ass:pos(save_x + save_btn_w / 2, edit_y + edit_h / 2)
-    ass:an(5)
-    ass:append(string.format('{\\bord0\\1c&HFFFFFF&\\fs11.5\\fn%s\\b%s}Save & Apply', font, is_save_sel and '800' or '600'))
-
-    -- Section 4: Advanced Tools Toggle
-    local adv_y = edit_y + edit_h + 12
-    local is_adv_sel = (state.menu_selected == 6)
-    tag_inspector_boxes[6] = { x1 = cx, y1 = adv_y, x2 = cx + cw, y2 = adv_y + 32 }
-    ass:new_event()
-    ass:pos(cx, adv_y)
-    ass:an(7)
-    local adv_fill = is_adv_sel and '&H7A4C24&' or '&H181816&'
-    local adv_bord = is_adv_sel and '&HFFE860&' or '&H2C2C28&'
-    ass:append('{\\bord' .. (is_adv_sel and '2.0' or '1.0') .. '\\1c' .. adv_fill .. '\\3c' .. adv_bord .. '\\1a&H00&}')
-    ass:draw_start()
-    ass:round_rect_cw(0, 0, cw, 32, 6)
-    ass:draw_stop()
-
-    ass:new_event()
-    ass:pos(cx + 14, adv_y + 16)
-    ass:an(4)
-    ass:append(string.format('{\\bord0\\1c%s\\fs10\\fn%s\\b700\\fsp1}ADVANCED & FOLDER TOOLS', is_adv_sel and '&HFFFFFF&' or '&H8E8E93&', font))
-
-    local exp_text = expanded and '[ Collapse Tools ▴ ]' or '[ Expand Tools ▾ ]'
-    ass:new_event()
-    ass:pos(cx + cw - 14, adv_y + 16)
-    ass:an(6)
-    ass:append(string.format('{\\bord0\\1c%s\\fs10\\fn%s\\b%s}%s', is_adv_sel and '&HFFFFFF&' or '&H64D2FF&', font, is_adv_sel and '800' or '700', exp_text))
-
-    local next_y = adv_y + 36
-    if expanded then
-        local is_b7_sel = (state.menu_selected == 7)
-        tag_inspector_boxes[7] = { x1 = cx + 10, y1 = next_y, x2 = cx + cw - 10, y2 = next_y + 32 }
-        ass:new_event()
-        ass:pos(cx + 10, next_y)
-        ass:an(7)
-        local b7_fill = is_b7_sel and '&H7A4C24&' or '&H161614&'
-        local b7_bord = is_b7_sel and '&HFFE860&' or '&H2A2A28&'
-        ass:append('{\\bord' .. (is_b7_sel and '2.0' or '1.0') .. '\\1c' .. b7_fill .. '\\3c' .. b7_bord .. '\\1a&H00&}')
-        ass:draw_start()
-        ass:round_rect_cw(0, 0, cw - 20, 32, 6)
-        ass:draw_stop()
-        ass:new_event()
-        ass:pos(cx + 24, next_y + 16)
-        ass:an(4)
-        local b7_label = (items[7] and items[7].label) or '• Batch Apply Title to Season Folder'
-        ass:append(string.format('{\\bord0\\1c%s\\fs10.5\\fn%s\\b%s}%s', is_b7_sel and '&HFFFFFF&' or '&HE0E0E0&', font, is_b7_sel and '700' or '600', utils and utils.ass_escape(b7_label) or b7_label))
-
-        local b8_y = next_y + 38
-        local is_b8_sel = (state.menu_selected == 8)
-        tag_inspector_boxes[8] = { x1 = cx + 10, y1 = b8_y, x2 = cx + cw - 10, y2 = b8_y + 32 }
-        ass:new_event()
-        ass:pos(cx + 10, b8_y)
-        ass:an(7)
-        local b8_fill = is_b8_sel and '&H251890&' or '&H181414&'
-        local b8_bord = is_b8_sel and '&H5070FF&' or '&H3A2222&'
-        ass:append('{\\bord' .. (is_b8_sel and '2.0' or '1.0') .. '\\1c' .. b8_fill .. '\\3c' .. b8_bord .. '\\1a&H00&}')
-        ass:draw_start()
-        ass:round_rect_cw(0, 0, cw - 20, 32, 6)
-        ass:draw_stop()
-        ass:new_event()
-        ass:pos(cx + 24, b8_y + 16)
-        ass:an(4)
-        local b8_warn_col = is_b8_sel and '&H80A0FF&' or '&H4040E0&'
-        ass:append(string.format('{\\bord0\\1c%s\\fs10.5\\fn%s\\b%s}• Strip All Header Titles in Directory  {\\1c%s\\b800}[⚠ Danger Zone]', is_b8_sel and '&HFFFFFF&' or '&HE0A0A0&', font, is_b8_sel and '700' or '600', b8_warn_col))
-
-        next_y = b8_y + 38
-    end
-
-    -- Section 5: Auto-Reload
-    local auto_idx = expanded and 9 or 7
-    local is_auto_sel = (state.menu_selected == auto_idx)
-    tag_inspector_boxes[auto_idx] = { x1 = cx, y1 = next_y, x2 = cx + cw, y2 = next_y + 26 }
-
-    if is_auto_sel then
-        ass:new_event()
-        ass:pos(cx, next_y)
-        ass:an(7)
-        ass:append('{\\bord1.5\\1c&H6A4422&\\3c&HFFE860&\\1a&H00&}')
-        ass:draw_start()
-        ass:round_rect_cw(0, 0, cw, 26, 6)
-        ass:draw_stop()
-    end
-
-    local cb_x = cx + 8
-    local cb_y = next_y + 5
-    local cb_sz = 16
-    ass:new_event()
-    ass:pos(cb_x, cb_y)
-    ass:an(7)
-    local cb_bord = is_auto_sel and '&HFFFFFF&' or '&H50504C&'
-    local cb_fill = is_auto_sel and '&H3A2616&' or '&H1C1C1A&'
-    ass:append('{\\bord' .. (is_auto_sel and '1.5' or '1.0') .. '\\1c' .. cb_fill .. '\\3c' .. cb_bord .. '\\1a&H00&}')
-    ass:draw_start()
-    ass:round_rect_cw(0, 0, cb_sz, cb_sz, 3)
-    ass:draw_stop()
-
-    if auto_reload then
-        ass:new_event()
-        ass:pos(cb_x + cb_sz / 2, cb_y + cb_sz / 2)
-        ass:an(5)
-        ass:append(string.format('{\\bord0\\1c&H2ECC71&\\fs11\\fn%s\\b800}✓', font))
-    end
-
-    ass:new_event()
-    ass:pos(cb_x + cb_sz + 10, cb_y + cb_sz / 2)
-    ass:an(4)
-    local ar_color = is_auto_sel and '&HFFFFFF&' or '&H8E8E93&'
-    local ar_weight = is_auto_sel and '\\b700' or '\\b500'
-    ass:append(string.format('{\\bord0\\1c%s\\fs10.5\\fn%s%s}Auto-reload playback after saving disk changes', ar_color, font, ar_weight))
-end
-
 function M.render(ass)
     local state = ctx_ref.state
     local user_opts = ctx_ref.user_opts or {}
@@ -2061,134 +1627,63 @@ function M.render(ass)
     if #items == 0 then return end
 
     local font  = user_opts.font or 'Inter'
-    if state.menu_active == 'tags' then
-        render_tag_inspector(ass, osc_param, font, menu_alpha, items)
-        return
-    end
-    local is_pl = (state.menu_active == 'playlist')
-    local is_sub_menu = state.menu_active and (
-        state.menu_active:find('^sub_') ~= nil or
-        state.menu_active == 'sub'
-    )
-    local is_drawer = state.menu_active and (
-        is_sub_menu or
-        state.menu_active == 'audio' or
-        state.menu_active == 'video'
-    )
-
-    local menu_w, row_h, header_h, footer_h, pad_bot, x0, y0, visible_max, scroll, vis, menu_h
-    local num_x, text_x
-    local is_searchable = not is_drawer and (state.menu_active == 'playlist' or state.menu_active == 'chapters') and (state.menu_searchable == true or (state.menu_searchable == nil and #items > 5))
-    local search_h = is_searchable and 42 or 0
-
-    if is_drawer then
-        menu_w    = math.max(360, math.min(420, math.floor(osc_param.playresx * 0.30)))
-        local has_any_sublabel = false
-        for _, item in ipairs(items) do
-            if item.sublabel and item.sublabel ~= '' then
-                has_any_sublabel = true
-                break
-            end
-        end
-        local is_video_menu = (state.menu_active == 'video')
-        row_h     = is_video_menu and 34 or (has_any_sublabel and 52 or 40)
-        header_h  = 48
-        footer_h  = 34
-        pad_bot   = 0
-        local cx  = math.floor(osc_param.playresx / 2)
-        local cy  = math.floor(osc_param.playresy / 2)
-        local y_safe_top = is_sub_menu and 22 or 24
-        local y_safe_bot = is_sub_menu and math.floor(osc_param.playresy * 0.78) or (osc_param.playresy - 24)
-        visible_max = math.max(1, math.floor((y_safe_bot - y_safe_top - header_h - footer_h) / row_h))
-
-        scroll = state.menu_scroll or 0
-        if scroll < 0 then scroll = 0 end
-        if state.menu_selected - scroll > visible_max then
-            scroll = state.menu_selected - visible_max
-        elseif state.menu_selected - scroll < 1 then
-            scroll = state.menu_selected - 1
-        end
-        if scroll < 0 then scroll = 0 end
-        state.menu_scroll = scroll
-
-        local total = #items
-        vis    = math.min(total - scroll, visible_max)
-        menu_h = header_h + vis * row_h + footer_h
-        if is_sub_menu then
-            x0 = math.max(20, math.floor(osc_param.playresx * 0.02))
-            y0 = y_safe_top
-        else
-            x0 = math.floor(cx - menu_w / 2)
-            y0 = math.max(y_safe_top, math.floor(cy - menu_h / 2))
-        end
-    else
-        local is_wide = is_pl or (state.menu_active == 'chapters') or (state.menu_active == 'tags') or (state.menu_active == 'tmdb_matches')
-        menu_w    = is_wide and math.min(920, math.floor(osc_param.playresx * 0.90)) or math.min(740, math.floor(osc_param.playresx * 0.88))
-        local pad_left  = 20
-        local has_any_sublabel = false
-        for _, item in ipairs(items) do
-            if item.sublabel and item.sublabel ~= '' then
-                has_any_sublabel = true
-                break
-            end
-        end
-        row_h     = (is_pl or state.menu_active == 'tags' or has_any_sublabel) and 60 or 46
-        header_h  = 56
-        footer_h  = 36
-        pad_bot   = 0
-        num_x     = 32
-        text_x    = pad_left + 46
-
-        local y_safe_top = 24
-        local y_safe_bot = osc_param.playresy - 24
-        visible_max = math.max(1, math.min(
-            (is_pl or state.menu_active == 'chapters') and 8 or 7,
-            math.floor((y_safe_bot - y_safe_top - header_h - search_h - footer_h) / row_h)
-        ))
-
-        scroll = state.menu_scroll or 0
-        if scroll < 0 then scroll = 0 end
-        if state.menu_selected - scroll > visible_max then
-            scroll = state.menu_selected - visible_max
-        elseif state.menu_selected - scroll < 1 then
-            scroll = state.menu_selected - 1
-        end
-        if scroll < 0 then scroll = 0 end
-        state.menu_scroll = scroll
-
-        local total  = #items
-        vis    = math.min(total - scroll, visible_max)
-        local card_vis = is_searchable and math.max(vis, math.min(6, visible_max)) or vis
-        menu_h = header_h + search_h + card_vis * row_h + footer_h
-
-        local cx = math.floor(osc_param.playresx / 2)
-        local cy = math.floor(osc_param.playresy / 2)
-        x0 = math.floor(cx - menu_w / 2)
-        y0 = math.max(y_safe_top, math.floor(cy - menu_h / 2))
-    end
-
-    local total = #items
+    local l = calculate_menu_layout(state, items, osc_param)
+    local total = l.total
     local eff_alpha = math.max(0, math.min(255, menu_alpha))
-    local dim_a = string.format('%02X', math.floor(255 - (110 * eff_alpha / 255)))
-    local pan_a = string.format('%02X', math.floor(255 - (is_drawer and (235 * eff_alpha / 255) or (200 * eff_alpha / 255))))
+    local progress = eff_alpha / 255
+    local ease = 1 - (1 - progress) * (1 - progress)
+
+    -- Obsidian Glass Tokens (Style A)
+    local pan_a = string.format('%02X', math.floor(255 - (238 * eff_alpha / 255)))
     local txt_a = string.format('%02X', math.floor(255 - eff_alpha))
 
+    -- Horizontal Slide Animation for Side Drawer
+    local slide_offset = l.is_drawer and math.floor((1 - ease) * 32) or 0
+    local x0 = l.x0 + slide_offset
+    local y0 = l.y0
+    local menu_w = l.menu_w
+    local menu_h = l.menu_h
+    local row_h = l.row_h
+    local header_h = l.header_h
+    local footer_h = l.footer_h
+    local is_drawer = l.is_drawer
+    local is_searchable = l.is_searchable
+    local search_h = l.search_h
+    local scroll = l.scroll
+    local vis = l.vis
+    local text_x = l.text_x
+    local num_x = l.num_x
+
+    -- Dimmer Backdrop
     if not is_drawer then
+        -- 42% Dark Scrim for Center Modals
+        local dim_a = string.format('%02X', math.floor(255 - (108 * eff_alpha / 255)))
         ass:new_event()
-        ass:pos(0,0)
+        ass:pos(0, 0)
         ass:an(7)
-        ass:append('{\\bord0\\blur0\\1c&H000000&\\1a&H'..dim_a..'&}')
+        ass:append('{\\bord0\\blur0\\1c&H000000&\\1a&H' .. dim_a .. '&}')
+        ass:draw_start()
+        ass:rect_cw(0, 0, osc_param.playresx, osc_param.playresy)
+        ass:draw_stop()
+    else
+        -- Subtle 18% Ambient Scrim for Side Drawers
+        local dim_a = string.format('%02X', math.floor(255 - (45 * eff_alpha / 255)))
+        ass:new_event()
+        ass:pos(0, 0)
+        ass:an(7)
+        ass:append('{\\bord0\\blur0\\1c&H000000&\\1a&H' .. dim_a .. '&}')
         ass:draw_start()
         ass:rect_cw(0, 0, osc_param.playresx, osc_param.playresy)
         ass:draw_stop()
     end
 
+    -- Card Background Panel (93.3% opaque obsidian + 1.2px specular rim light)
     ass:new_event()
     ass:pos(x0, y0)
     ass:an(7)
-    ass:append('{\\bord1.2\\blur0.5\\1c&H161614&\\3c&HFFFFFF&\\3a&HD0&\\1a&H'..pan_a..'&}')
+    ass:append('{\\bord1.2\\blur0.4\\1c&H121210&\\3c&HFFFFFF&\\3a&HE0&\\1a&H' .. pan_a .. '&}')
     ass:draw_start()
-    ass:round_rect_cw(0, 0, menu_w, menu_h, 16)
+    ass:round_rect_cw(0, 0, menu_w, menu_h, 14)
     ass:draw_stop()
 
     local titles = {
@@ -2207,8 +1702,8 @@ function M.render(ass)
     ass:new_event()
     ass:pos(x0 + 18, y0 + header_h / 2)
     ass:an(4)
-    ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs10\\fn%s\\b600\\fsp1\\q2}', font))
-    ass:append('ESC')
+    local esc_lbl = (is_drawer and state.menu_active and state.menu_active:find('^sub_') and state.menu_active ~= 'sub_config') and '‹ BACK' or 'ESC'
+    ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs10\\fn%s\\b600\\fsp1\\q2}%s', font, esc_lbl))
 
     if state.menu_active == 'playlist' and state.playlist_is_series then
         ass:new_event()
@@ -2252,12 +1747,18 @@ function M.render(ass)
         elseif state.menu_active and state.menu_active:find('^sub_') then
             ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b600\\q2}', font))
             ass:append('ESC: Styling')
+        elseif state.menu_active == 'chapters' then
+            ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b500\\q2}', font))
+            ass:append(string.format('%d chapters', total))
         elseif state.menu_active == 'video' then
             ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b500\\q2}', font))
             ass:append('Tuning')
         elseif state.menu_active == 'audio' then
             ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b500\\q2}', font))
             ass:append('DSP & Tracks')
+        elseif state.menu_active == 'tags' then
+            ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b500\\q2}', font))
+            ass:append('Matroska Tags')
         elseif is_drawer then
             ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b500\\q2}', font))
             ass:append(string.format('%d tracks', total))
@@ -2277,7 +1778,7 @@ function M.render(ass)
     ass:new_event()
     ass:pos(x0, y0 + header_h)
     ass:an(7)
-    ass:append('{\\bord0\\blur0\\1c&H2C2C2E&\\1a&H40&}')
+    ass:append('{\\bord0\\blur0\\1c&HFFFFFF&\\1a&HE8&}')
     ass:draw_start()
     ass:rect_cw(0, 0, menu_w, 1)
     ass:draw_stop()
@@ -2432,15 +1933,23 @@ function M.render(ass)
                     ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H%s&\\fs12\\fn%s\\b500\\q2}', txt_a, font))
                     ass:append('‹  {\\1c&HE5E5EA&}' .. val_text .. '{\\1c&H8E8E93&}  ›')
                 end
-            elseif item.action == 'nav_menu' or item.action == 'open_sub_config' then
+            elseif item.action == 'nav_menu' or item.action == 'open_sub_config' or item.action == 'search_tmdb_picker' or item.action == 'edit_manual_inline' then
                 local val_text = (item.value and item.value ~= '') and (item.value .. '  ›') or '›'
                 local nav_col = is_sel and '&HFFFFFF&' or '&H8E8E93&'
                 ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs12\\fn%s\\b600\\q2}', nav_col, txt_a, font))
                 ass:append(val_text)
             elseif is_cur then
                 local cur_col = is_sel and '&HFFFFFF&' or '&H0A84FF&'
-                ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs14\\b700\\q2}', cur_col, txt_a))
-                ass:append('✓')
+                if item.time_str and item.time_str ~= '' then
+                    ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs11\\fn%s\\b500\\q2}%s  {\\fs14\\b700}✓', cur_col, txt_a, font, item.time_str))
+                else
+                    ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs14\\b700\\q2}', cur_col, txt_a))
+                    ass:append('✓')
+                end
+            elseif item.time_str and item.time_str ~= '' then
+                local time_col = is_sel and '&HFFFFFF&' or '&H8E8E93&'
+                ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs11\\fn%s\\b500\\q2}', time_col, txt_a, font))
+                ass:append(item.time_str)
             elseif item.value and item.value ~= '' then
                 local val_col = is_sel and '&HFFFFFF&' or '&H8E8E93&'
                 ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs12\\fn%s\\b500\\q2}', val_col, txt_a, font))
@@ -2452,18 +1961,18 @@ function M.render(ass)
                 ass:new_event()
                 ass:pos(x0 + 16, ry + row_h)
                 ass:an(7)
-                ass:append('{\\bord0\\blur0\\1c&H2C2C2E&\\1a&H60&}')
+                ass:append('{\\bord0\\blur0\\1c&HFFFFFF&\\1a&HF0&}')
                 ass:draw_start()
                 ass:rect_cw(0, 0, menu_w - 32, 1)
                 ass:draw_stop()
             end
         else
-            -- Existing centered modal row rendering
+            -- Centered modal row rendering
             if is_sel then
                 ass:new_event()
                 ass:pos(x0 + 6, ry + 4)
                 ass:an(7)
-                ass:append('{\\bord0\\blur0\\1c&HFFFFFF&\\1a&HE0&}')
+                ass:append('{\\bord0\\blur0\\1c&HFFFFFF&\\1a&HE4&}')
                 ass:draw_start()
                 ass:round_rect_cw(0, 0, menu_w - 12, row_h - 8, 8)
                 ass:draw_stop()
@@ -2510,7 +2019,7 @@ function M.render(ass)
                 ass:new_event()
                 ass:pos(x0 + text_x, ry + row_h)
                 ass:an(7)
-                ass:append('{\\bord0\\blur0\\1c&H2C2C2E&\\1a&H40&}')
+                ass:append('{\\bord0\\blur0\\1c&HFFFFFF&\\1a&HF0&}')
                 ass:draw_start()
                 ass:rect_cw(0, 0, menu_w - text_x - 18, 1)
                 ass:draw_stop()
@@ -2522,7 +2031,7 @@ function M.render(ass)
     ass:new_event()
     ass:pos(x0, y0 + menu_h - footer_h)
     ass:an(7)
-    ass:append('{\\bord0\\blur0\\1c&H2C2C2E&\\1a&H40&}')
+    ass:append('{\\bord0\\blur0\\1c&HFFFFFF&\\1a&HE8&}')
     ass:draw_start()
     ass:rect_cw(0, 0, menu_w, 1)
     ass:draw_stop()

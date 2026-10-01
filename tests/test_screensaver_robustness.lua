@@ -281,6 +281,58 @@ local dim_gray = {
 }
 assert_eq("Dim logo brightened", eval_logo_luminance(dim_gray), 'eq=brightness=0.25:contrast=1.1,')
 
+print("\n=== 6. Testing Studio Extraction & Holding Company Filtering ===")
+
+package.loaded['mp.assdraw'] = { ass_new = function() return {} end }
+package.loaded['mp.utils'] = { file_info = function() return nil end, readdir = function() return {} end }
+_G.mp = _G.mp or {
+    create_osd_overlay = function() return { update = function() end, remove = function() end } end,
+    register_event = function() end,
+    observe_property = function() end,
+    get_property = function() return '' end,
+    get_property_native = function() return nil end,
+    set_property_native = function() end,
+    command_native = function() return '' end,
+    commandv = function() end,
+    add_timeout = function() return { kill = function() end } end,
+}
+
+local ss = require('modules.screensaver')
+assert_true("Screensaver module loads", ss ~= nil)
+assert_true("filter_and_format_studios exported", type(ss.filter_and_format_studios) == 'function')
+
+-- Weathering With You TMDB production_companies
+local wwy_companies = {
+    { id = 3756, logo_path = "/t38uPdbKmyBB8brKKeTFWIwojRz.png", name = "CoMix Wave Films", origin_country = "JP" },
+    { id = 128616, logo_path = "/cjmwexOzetWZa8QKy447NMrM6MG.png", name = "Story", origin_country = "JP" },
+    { id = 882, logo_path = "/fRSWWjquvzcHjACbtF53utZFIll.png", name = "TOHO", origin_country = "JP" },
+    { id = 2073, logo_path = "/tWxRSaKmRJNTcmtlXsmn5R4KOSU.png", name = "KADOKAWA", origin_country = "JP" },
+    { id = 8157, logo_path = "/pEqcMX1aG3JvtDgfh2wNZJLCcb4.png", name = "jeki", origin_country = "JP" },
+    { id = 104184, logo_path = "/reEBh8dBl2y1DbXe2EdgxtMtaim.png", name = "Lawson Entertainment", origin_country = "JP" },
+    { id = 145448, logo_path = nil, name = "\"Weathering With You\" Film Partners", origin_country = "JP" }
+}
+local wwy_studios = ss.filter_and_format_studios(wwy_companies, nil)
+assert_eq("Weathering With You returns CoMix Wave Films · TOHO (excluding Story & Partners)", wwy_studios, "CoMix Wave Films  ·  TOHO")
+
+-- Crime 101 TMDB production_companies
+local crime_companies = {
+    { id = 10163, logo_path = "/16KWBMmfPX0aJzDExDrPxSLj0Pg.png", name = "Working Title", origin_country = "GB" },
+    { id = 122772, logo_path = nil, name = "The Story Factory", origin_country = "US" },
+    { id = 23949, logo_path = "/3QFwomSxcZZgMQGBkdUPuJEnSFB.png", name = "RAW", origin_country = "GB" },
+    { id = 210099, logo_path = "/g5oRCNCi8kNVb8gEoSoIcqkhjmR.png", name = "Amazon MGM Studios", origin_country = "US" },
+    { id = 183787, logo_path = "/8G6CbTenzORJdoep1AaghtSEQrY.png", name = "Wild State", origin_country = "US" }
+}
+local crime_studios = ss.filter_and_format_studios(crime_companies, nil)
+assert_eq("Crime 101 returns Working Title · Amazon MGM Studios (excluding The Story Factory)", crime_studios, "Working Title  ·  Amazon MGM Studios")
+
+-- TV series network fallback
+local tv_networks = {
+    { id = 49, name = "HBO", logo_path = "/tuomPhY2UtuPTqqFnKMVHvSb724.png" }
+}
+local tv_studios = ss.filter_and_format_studios({}, tv_networks)
+assert_eq("TV series with empty companies falls back to network", tv_studios, "HBO")
+
+
 print(string.format("\n========================================================"))
 print(string.format("Screensaver Robustness Suite: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))
 print(string.format("========================================================"))

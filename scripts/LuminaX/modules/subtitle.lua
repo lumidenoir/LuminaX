@@ -776,14 +776,24 @@ function M.add_sub_scale(delta)
     current_sub_scale = new_val
     M.update_overlay()
     local eff_fs = math.floor((config.font_size or 24) * current_sub_scale + 0.5)
-    mp.osd_message(string.format('Subtitle Size: %dpt (%d%%)', eff_fs, math.floor(new_val * 100)), 1.5)
+    local msg = string.format('Sub Size: %dpt (%d%%)', eff_fs, math.floor(new_val * 100))
+    if ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill('\238\129\136', msg)
+    else
+        mp.osd_message(msg, 1.5)
+    end
 end
 
 function M.reset_sub_scale()
     pcall(mp.set_property_number, 'sub-scale', 1.0)
     current_sub_scale = 1.0
     M.update_overlay()
-    mp.osd_message(string.format('Subtitle Size: %dpt (100%%)', config.font_size or 24), 1.5)
+    local msg = string.format('Sub Size: %dpt (100%%)', config.font_size or 24)
+    if ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill('\238\129\136', msg)
+    else
+        mp.osd_message(msg, 1.5)
+    end
 end
 
 function M.toggle_visibility()
@@ -791,10 +801,14 @@ function M.toggle_visibility()
     save_config()
     if config.visible then
         M.update_overlay()
-        mp.osd_message('Subtitles: Visible', 1.5)
     else
         if overlay then overlay:remove() end
-        mp.osd_message('Subtitles: Hidden', 1.5)
+    end
+    local msg = config.visible and 'Subtitles: Visible' or 'Subtitles: Hidden'
+    if ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill('\238\129\136', msg)
+    else
+        mp.osd_message(msg, 1.5)
     end
     if ctx_ref.request_tick then ctx_ref.request_tick() end
 end
@@ -1163,17 +1177,11 @@ function M.step_sub_delay(delta)
     local cur = mp.get_property_number('sub-delay', 0.0) or 0.0
     local nxt = math.floor((cur + delta) * 10 + 0.5) / 10
     pcall(mp.set_property_number, 'sub-delay', nxt)
-    if math.abs(nxt) < 0.005 then
-        mp.osd_message('✓ Subtitle Delay: Synced (0 ms)', 1.5)
-    else
-        mp.osd_message(string.format('✓ Subtitle Delay: %+.1f s (%+d ms)', nxt, math.floor(nxt * 1000 + 0.5)), 1.5)
-    end
     if ctx_ref.request_tick then ctx_ref.request_tick() end
 end
 
 function M.reset_sub_delay()
     pcall(mp.set_property_number, 'sub-delay', 0.0)
-    mp.osd_message('✓ Subtitle Delay: Reset to 0 ms (Synced)', 1.5)
     if ctx_ref.request_tick then ctx_ref.request_tick() end
 end
 

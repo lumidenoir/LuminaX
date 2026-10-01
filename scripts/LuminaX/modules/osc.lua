@@ -650,146 +650,16 @@ function get_track(type)
 end
 
 --
--- Media Badges Renderer (Apple TV / Infuse Pill Badges)
+-- Media Badges Renderer (Delegated to unified modules.utils)
 --
--- Collect badge table (shared between OSC bar and screensaver)
-local function collect_media_badges()
-    local badges = {}
-
-    -- 1. Video Resolution (Ice Blue / Steel)
-    local vw = mp.get_property_number('video-params/w', 0)
-    local vh = mp.get_property_number('video-params/h', 0)
-    if vw >= 3800 or vh >= 2100 then
-        table.insert(badges, {text = '4K',    w = 24, fg = 'D6A27E', bg = '302218', bord = '885B3B'})
-    elseif vw >= 1900 or vh >= 1000 then
-        table.insert(badges, {text = '1080P', w = 38, fg = 'B8A89A', bg = '282018', bord = '605040'})
-    end
-
-    -- 2. HDR / Dolby Vision (Warm Ember / Gold - ASS BGR)
-    local gamma    = mp.get_property('video-params/gamma', '')
-    local sig_peak = mp.get_property_number('video-params/sig-peak', 0)
-    local hdr_cll  = mp.get_property('video-params/hdr-max-cll')
-    local dv       = mp.get_property('video-params/dolby-vision-profile')
-                  or mp.get_property('video-params/dv-profile')
-    local primaries = mp.get_property('video-params/primaries', '')
-
-    if dv and dv ~= '' then
-        table.insert(badges, {text = 'VISION', w = 46, fg = '3CA9E5', bg = '10202A', bord = '18557A'})
-    elseif gamma == 'pq' or gamma == 'hlg' or sig_peak > 1
-        or hdr_cll ~= nil or primaries == 'bt.2020' then
-        table.insert(badges, {text = 'HDR',   w = 30, fg = '3CA9E5', bg = '10202A', bord = '18557A'})
-    end
-
-    -- 3. Audio Codec & Standards (Twilight Violet / Sky Blue / Sage)
-    local audio_codec  = (mp.get_property('audio-codec-name') or ''):lower()
-    local track_title  = (mp.get_property('current-tracks/audio/title') or ''):lower()
-    local media_title  = (mp.get_property('media-title') or ''):lower()
-    local filename_lc  = (mp.get_property('filename') or ''):lower()
-
-    if track_title:find('atmos') or media_title:find('atmos') or filename_lc:find('atmos') then
-        table.insert(badges, {text = 'ATMOS',  w = 46, fg = 'FF92B8', bg = '2E1820', bord = '8A3A5A'})
-    elseif audio_codec:find('truehd') then
-        table.insert(badges, {text = 'TRUEHD', w = 50, fg = 'FF92B8', bg = '2E1820', bord = '8A3A5A'})
-    elseif audio_codec:find('dts') then
-        table.insert(badges, {text = 'DTS',    w = 28, fg = 'F0B080', bg = '2C2218', bord = '705538'})
-    elseif audio_codec:find('flac') then
-        table.insert(badges, {text = 'FLAC',   w = 32, fg = '80D8A0', bg = '1C2818', bord = '3A6038'})
-    end
-
-    -- 4. Surround Channels (Neutral Studio Gray)
-    local channels = mp.get_property_number('audio-params/channel-count', 0)
-    if channels == 8 then
-        table.insert(badges, {text = '7.1', w = 22, fg = 'ACA19B', bg = '201C1A', bord = '443C38'})
-    elseif channels == 6 then
-        table.insert(badges, {text = '5.1', w = 22, fg = 'ACA19B', bg = '201C1A', bord = '443C38'})
-    end
-
-    return badges
-end
-
--- Draw badge pills LEFT-TO-RIGHT starting at (start_x, center_y)
--- Returns the x position after the last badge
-local function draw_badges_ltr(ass, badges, start_x, cy, badge_h, alpha)
-    if not badges or #badges == 0 then return start_x end
-    local cur_x = start_x
-    local pad   = math.floor(badge_h * 0.65)   -- horizontal padding inside pill
-    local gap   = 7                            -- gap between pills
-    local r     = 4                            -- modern rounded rectangle radius
-    local fs    = math.max(10, math.floor(badge_h * 0.52))
-    for _, b in ipairs(badges) do
-        local bw = b.w + pad
-        local bx = cur_x
-        local bg_col = b.bg or '1A1A1E'
-        local bord_col = b.bord or '404048'
-
-        -- pill background: category translucent tint with 1px etched glass border
-        ass:new_event()
-        ass:pos(0, 0)
-        ass:an(7)
-        ass:append(string.format(
-            '{\\blur0\\bord1\\1c&H%s&\\3c&H%s&}', bg_col, bord_col))
-        if alpha then
-            if type(alpha) == 'table' then
-                local a_bg = mult_alpha(alpha[1] or 0, 0x20)
-                local a_bord = mult_alpha(alpha[3] or 0, 0x40)
-                if state.animation then
-                    a_bg = mult_alpha(a_bg, state.animation)
-                    a_bord = mult_alpha(a_bord, state.animation)
-                end
-                ass:append(string.format('{\\1a&H%02X&\\3a&H%02X&}', a_bg, a_bord))
-            elseif type(alpha) == 'string' then
-                ass:append(string.format('{\\1a&H%s&\\3a&H%s&}', alpha, alpha))
-            end
-        else
-            ass:append('{\\1a&H20&\\3a&H40&}')
-        end
-        ass:draw_start()
-        ass:round_rect_cw(bx, cy - badge_h/2, bx + bw, cy + badge_h/2, r)
-        ass:draw_stop()
-
-        -- pill text: crisp high-contrast format-specific color
-        ass:new_event()
-        ass:pos(bx + bw/2, cy)
-        ass:an(5)
-        ass:append(string.format(
-            '{\\fnInter\\b700\\fs%d\\1c&H%s&\\bord0\\shad0\\fsp0.5}', fs, b.fg))
-        if alpha then
-            if type(alpha) == 'table' then
-                local a_fg = alpha[1] or 0
-                if state.animation then a_fg = mult_alpha(a_fg, state.animation) end
-                ass:append(string.format('{\\1a&H%02X&}', a_fg))
-            elseif type(alpha) == 'string' then
-                ass:append(string.format('{\\1a&H%s&}', alpha))
-            end
-        else
-            ass:append('{\\1a&H00&}')
-        end
-        ass:append(b.text)
-        cur_x = bx + bw + gap
-    end
-    return cur_x
-end
-
-local function calc_badges_width(badges, badge_h)
-    if not badges or #badges == 0 then return 0 end
-    local pad = math.floor(badge_h * 0.65)
-    local gap = 7
-    local total = 0
-    for i, b in ipairs(badges) do
-        local bw = (b.w or 24) + pad
-        total = total + bw + (i > 1 and gap or 0)
-    end
-    return total
-end
-
--- OSC bar badge renderer (above title, Option B layout)
 local function render_media_badges(elem_ass, elem_geo, alpha)
-    local badges = collect_media_badges()
+    local u = ctx_ref and ctx_ref.utils
+    if not u or not u.collect_media_badges or not u.draw_badges_ltr then return end
+    local badges = u.collect_media_badges()
     if #badges == 0 then return end
-    -- elem_geo.x is the left edge, elem_geo.y is the anchor Y
     local badge_h = 16
     local cy      = elem_geo.y + badge_h / 2  -- vertically centred on this row
-    draw_badges_ltr(elem_ass, badges, elem_geo.x, cy, badge_h, alpha)
+    u.draw_badges_ltr(elem_ass, badges, elem_geo.x, cy, badge_h, alpha, state.animation)
 end
 
 --
@@ -928,6 +798,7 @@ function render_elements(master_ass)
         end
     end
 
+    local loop_seekbar_data = nil
     for n=1, #elements do
         local element = elements[n]
         local is_vbar = (element.name == 'volumebar' or element.name == 'volumebarbg')
@@ -981,8 +852,13 @@ function render_elements(master_ass)
             if (element.name == 'seekbarbg') then
                 local anim = state.seekbar_anim or 0.0
                 local bar_h = 3.0 + 4.0 * anim
+                -- Centre the bar vertically inside the hitbox (same maths as the FG fill)
+                local bg_gap = (elem_geo.h - bar_h) / 2
                 elem_ass:draw_start()
-                elem_ass:round_rect_cw(0, 0, elem_geo.w, bar_h, bar_h / 2)
+                -- Anchor bounding box to [0, 0, w, h] so libass \an5 centers at elem_geo.y (same hack as slider)
+                elem_ass:rect_cw(0, 0, elem_geo.w, elem_geo.h)
+                elem_ass:rect_ccw(0, 0, elem_geo.w, elem_geo.h)
+                elem_ass:round_rect_cw(0, bg_gap, elem_geo.w, elem_geo.h - bg_gap, bar_h / 2)
                 elem_ass:draw_stop()
             elseif (element.name == 'volumebarbg') then
                 local anim_w = (vmode == 'hover') and math.floor(elem_geo.w * (state.vol_anim or 1.0) + 0.5) or elem_geo.w
@@ -1006,12 +882,42 @@ function render_elements(master_ass)
                     local bar_h = 3.0 + 4.0 * anim
                     local gap = (elem_geo.h - bar_h) / 2
                     local rh = (user_opts.seekbarhandlesize * elem_geo.h / 2) * (0.35 + 0.65 * anim)
-                    local xp
+                    local xp = pos and get_slider_ele_pos_for(element, pos) or nil
 
-                    if pos then
-                        xp = get_slider_ele_pos_for(element, pos)
-                        ass_draw_cir_cw(elem_ass, xp, elem_geo.h / 2, rh)
-                        elem_ass:round_rect_cw(0, gap, xp, elem_geo.h - gap, bar_h / 2)
+                    local loop_a = mp.get_property_number('ab-loop-a')
+                    local loop_b = mp.get_property_number('ab-loop-b')
+                    local dur = mp.get_property_number('duration', 0)
+                    local has_loop = loop_a and dur and dur > 0 and loop_a >= 0
+
+                    if not has_loop then
+                        if xp then
+                            ass_draw_cir_cw(elem_ass, xp, elem_geo.h / 2, rh)
+                            elem_ass:round_rect_cw(0, gap, xp, elem_geo.h - gap, bar_h / 2)
+                        end
+                    else
+                        local ax = get_slider_ele_pos_for(element, math.min(100, math.max(0, (loop_a / dur) * 100)))
+                        local bx = (loop_b and loop_b > 0) and get_slider_ele_pos_for(element, math.min(100, math.max(0, (loop_b / dur) * 100))) or nil
+
+                        -- White played progress stops cleanly at Point A
+                        if xp and xp > 0 then
+                            local white_end = math.min(xp, ax)
+                            if white_end > 0 then
+                                elem_ass:round_rect_cw(0, gap, white_end, elem_geo.h - gap, bar_h / 2)
+                            end
+                        end
+                        -- White handle circle if playhead is before Point A
+                        if xp and xp <= ax then
+                            ass_draw_cir_cw(elem_ass, xp, elem_geo.h / 2, rh)
+                        end
+
+                        loop_seekbar_data = {
+                            element = element,
+                            bar_h = bar_h,
+                            rh = rh,
+                            ax = ax,
+                            bx = bx,
+                            xp = xp,
+                        }
                     end
                 else
                     local rh = user_opts.seekbarhandlesize * elem_geo.h / 2
@@ -1189,7 +1095,88 @@ function render_elements(master_ass)
 			end
         end
 
-            master_ass:merge(elem_ass)
+        master_ass:merge(elem_ass)
+
+        if loop_seekbar_data and element.name == 'seekbar' then
+            local ld = loop_seekbar_data
+            local sb_x0 = ld.element.hitbox.x1
+            local center_y = ld.element.layout.geometry.y
+            local y1 = center_y - ld.bar_h / 2
+            local y2 = center_y + ld.bar_h / 2
+            local ax_s = sb_x0 + ld.ax
+            local bx_s = ld.bx and (sb_x0 + ld.bx) or nil
+            local cur_x_s = ld.xp and (sb_x0 + ld.xp) or nil
+
+            local ab_ass = assdraw.ass_new()
+
+            -- 1. Translucent amber loop track across entire [A, B] window
+            if bx_s and (bx_s - ax_s) > 0.5 then
+                ab_ass:new_event()
+                ab_ass:pos(0, 0)
+                ab_ass:an(7)
+                ab_ass:append('{\\blur0\\bord0\\1c&H00A5FF&\\1a&H90&}')
+                ab_ass:draw_start()
+                ab_ass:round_rect_cw(ax_s, y1, bx_s, y2, ld.bar_h / 2)
+                ab_ass:draw_stop()
+            end
+
+            -- 2. Solid vibrant amber fill for played portion inside loop
+            if cur_x_s and cur_x_s > ax_s then
+                local played_end = bx_s and math.min(bx_s, cur_x_s) or cur_x_s
+                if (played_end - ax_s) > 0.5 then
+                    ab_ass:new_event()
+                    ab_ass:pos(0, 0)
+                    ab_ass:an(7)
+                    ab_ass:append('{\\blur0\\bord0\\1c&H00A5FF&\\1a&H00&}')
+                    ab_ass:draw_start()
+                    ab_ass:round_rect_cw(ax_s, y1, played_end, y2, ld.bar_h / 2)
+                    ab_ass:draw_stop()
+                end
+            end
+
+            -- 3. Gold loop node cap markers (Point A and Point B)
+            local node_r = (ld.bar_h / 2) + 2.0
+            ab_ass:new_event()
+            ab_ass:pos(0, 0)
+            ab_ass:an(7)
+            ab_ass:append('{\\blur0\\bord0.5\\1c&H00D7FF&\\3c&H004488&\\1a&H00&\\3a&H20&}')
+            ab_ass:draw_start()
+            ass_draw_cir_cw(ab_ass, ax_s, center_y, node_r)
+            if bx_s then
+                ass_draw_cir_cw(ab_ass, bx_s, center_y, node_r)
+            end
+            ab_ass:draw_stop()
+
+            -- 3b. "A" / "B" micro-labels above each node marker
+            local lbl_style = '{\\blur0\\bord0.4\\1c&H00D7FF&\\3c&H003366&\\fs7\\b700\\fn' .. user_opts.font .. '}'
+            local lbl_y = y1 - 2  -- just above the bar
+            ab_ass:new_event()
+            ab_ass:pos(ax_s, lbl_y)
+            ab_ass:an(2)
+            ab_ass:append(lbl_style .. 'A')
+            if bx_s then
+                ab_ass:new_event()
+                ab_ass:pos(bx_s, lbl_y)
+                ab_ass:an(2)
+                ab_ass:append(lbl_style .. 'B')
+            end
+
+            -- 4. White playhead handle circle if inside or past loop Point A
+            if cur_x_s and cur_x_s > ax_s then
+                ab_ass:new_event()
+                ab_ass:pos(0, 0)
+                ab_ass:an(7)
+                ab_ass:append('{\\blur0\\bord0\\1c&HFFFFFF&\\1a&H00&}')
+                ab_ass:draw_start()
+                ass_draw_cir_cw(ab_ass, cur_x_s, center_y, ld.rh)
+                ab_ass:draw_stop()
+            end
+
+            master_ass:merge(ab_ass)
+            loop_seekbar_data = nil
+        end
+
+
         end
     end
 end
@@ -1487,7 +1474,7 @@ local UI_OFFSET_Y = 0
     osc_param.areas = {} -- delete areas
 
     -- area for active mouse input
-    add_area('input', get_hitbox_coords(posX, posY + UI_OFFSET_Y, 1, osc_geo.w, 104))
+    add_area('input', get_hitbox_coords(posX, posY + UI_OFFSET_Y, 1, osc_geo.w, 110))
 
     -- area for show/hide
     add_area('showhide', 0, 0, osc_param.playresx, osc_param.playresy)
@@ -1530,7 +1517,9 @@ local UI_OFFSET_Y = 0
     --
     new_element('seekbarbg', 'box')
     lo = add_layout('seekbarbg')
-    lo.geometry = {x = refX , y = refY - 96 + UI_OFFSET_Y , an = 5, w = osc_geo.w - 50, h = 3}
+    -- h must match the seekbar slider h so both have the same center point;
+    -- the actual bar thickness is painted dynamically in render_elements.
+    lo.geometry = {x = refX , y = refY - 96 + UI_OFFSET_Y , an = 5, w = osc_geo.w - 50, h = 19}
     lo.layer = 13
     lo.style = osc_styles.SeekbarBg
     lo.alpha[1] = 128
@@ -2179,23 +2168,19 @@ function osc_init()
             end
         end
         mp.set_property_number('speed', next_spd)
-        mp.osd_message(string.format('Speed: %.2f×', next_spd), 1.5)
     end
     ne.eventresponder['mbtn_right_up'] = function ()
         mp.set_property_number('speed', 1.0)
-        mp.osd_message('Speed: 1.00× (Normal)', 1.5)
     end
     ne.eventresponder['wheel_up_press'] = function ()
         local spd = mp.get_property_number('speed', 1.0) or 1.0
         local next_spd = math.min(4.0, math.floor((spd + 0.1) * 10 + 0.5) / 10)
         mp.set_property_number('speed', next_spd)
-        mp.osd_message(string.format('Speed: %.1f×', next_spd), 1.5)
     end
     ne.eventresponder['wheel_down_press'] = function ()
         local spd = mp.get_property_number('speed', 1.0) or 1.0
         local next_spd = math.max(0.2, math.floor((spd - 0.1) * 10 + 0.5) / 10)
         mp.set_property_number('speed', next_spd)
-        mp.osd_message(string.format('Speed: %.1f×', next_spd), 1.5)
     end
 
     -- tog_chapters
@@ -2266,6 +2251,8 @@ function osc_init()
                 return string.format('%s \xc2\xb7 S%02dE%02d', clean_show, tonumber(clean_s), tonumber(clean_e))
             elseif clean_show and clean_y then
                 return string.format('%s (%s)', clean_show, clean_y)
+            elseif clean_show and clean_show ~= '' then
+                return clean_show
             end
         end
 

@@ -64,7 +64,18 @@ screensaver.init({
     end,
 })
 
--- 3. Initialize Subtitle Subsystem
+-- 3. Initialize HUDs
+huds.init({
+    icons           = icons,
+    utils           = utils,
+    get_canvas_size = function() return utils.get_canvas_size(osc_param) end,
+    make_pill_ass   = utils.make_pill_ass,
+    on_interaction  = function()
+        screensaver.hide()
+    end,
+})
+
+-- 4. Initialize Subtitle Subsystem
 subtitle.init({
     utils        = utils,
     user_opts    = user_opts,
@@ -72,9 +83,10 @@ subtitle.init({
     osc_param    = osc_param,
     request_tick = osc.request_tick,
     screensaver  = screensaver,
+    huds         = huds,
 })
 
--- 4. Initialize Menu
+-- 5. Initialize Menu
 menu.init({
     subtitle          = subtitle,
     state             = state,
@@ -86,6 +98,7 @@ menu.init({
     tag_editor        = tag_editor,
     utils             = utils,
     screensaver       = screensaver,
+    huds              = huds,
     get_tmdb_current  = screensaver.get_current,
     inhibit_screensaver = screensaver.inhibit,
     on_open           = function()
@@ -107,23 +120,14 @@ menu.init({
     end,
 })
 
--- 5. Initialize OSC
+-- 6. Initialize OSC
 osc.init({
     menu        = menu,
     tag_editor  = tag_editor,
     screensaver = screensaver,
     subtitle    = subtitle,
+    huds        = huds,
     utils       = utils,
-})
-
--- 6. Initialize HUDs
-huds.init({
-    icons           = icons,
-    get_canvas_size = function() return utils.get_canvas_size(osc_param) end,
-    make_pill_ass   = utils.make_pill_ass,
-    on_interaction  = function()
-        screensaver.hide()
-    end,
 })
 
 -- 6. Register Script Keybindings & Bindings
@@ -177,6 +181,12 @@ end)
 
 mp.add_key_binding(nil, 'sub-scale-reset', function()
     if subtitle and subtitle.reset_sub_scale then subtitle.reset_sub_scale() end
+end)
+
+mp.add_key_binding('v', 'toggle-sub-visibility', function()
+    if subtitle and subtitle.toggle_visibility then
+        subtitle.toggle_visibility()
+    end
 end)
 
 mp.add_key_binding(nil, 'menu-video', function()

@@ -70,6 +70,7 @@ local ss_delay_timer    = nil    -- fires after SCREENSAVER_DELAY to start fade-
 local ss_fade_timer     = nil    -- drives fade-in animation
 local ss_fade_out_timer = nil    -- drives smooth fade-out animation
 local ss_clock_timer    = nil    -- periodic timer to keep "Ends" time live in real-time
+local ss_burnin_timer   = nil    -- periodic timer for OLED anti burn-in pixel micro-drift
 local ss_last_ends_t    = nil    -- tracks current formatted ends time to avoid redundant redraws
 local ss_fade_start     = 0
 local SS_FADE_DUR       = 0.40   -- fade-in duration
@@ -166,40 +167,15 @@ local function estimate_meta_width(meta_str, fs)
 end
 
 local function format_currency(n)
-    if not n or n <= 0 then return nil end
-    local s = tostring(math.floor(n))
-    local formatted = s:reverse():gsub('(%d%d%d)', '%1,'):reverse():gsub('^,', '')
-    return '$' .. formatted
+    return utils_mod and utils_mod.format_currency and utils_mod.format_currency(n)
 end
 
 local function format_date(d_str)
-    if not d_str or d_str == '' then return nil end
-    local y, m, d = d_str:match('(%d%d%d%d)%-(%d%d)%-(%d%d)')
-    if not y or not m or not d then return d_str end
-    local months = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'}
-    local m_idx = tonumber(m)
-    local m_name = months[m_idx] or m
-    return string.format('%s %d, %s', m_name, tonumber(d), y)
+    return utils_mod and utils_mod.format_date and utils_mod.format_date(d_str)
 end
 
 local function format_ends_time(duration_min)
-    local rem = mp.get_property_number('playtime-remaining')
-    if not rem or rem <= 0 or rem ~= rem then
-        rem = (duration_min and duration_min > 0 and duration_min == duration_min) and (duration_min * 60) or 0
-    end
-    if rem > 0 and rem < 8640000 then
-        local ok, res = pcall(function()
-            local end_t = os.time() + math.floor(rem)
-            local h = tonumber(os.date('%H', end_t))
-            local m = os.date('%M', end_t)
-            local ampm = (h and h >= 12) and 'PM' or 'AM'
-            local h12 = (h and h % 12) or 12
-            if h12 == 0 then h12 = 12 end
-            return string.format('%d:%s %s', h12, m, ampm)
-        end)
-        if ok and res then return res end
-    end
-    return nil
+    return utils_mod and utils_mod.format_ends_time and utils_mod.format_ends_time(duration_min)
 end
 
 local function render_screensaver(alpha)
@@ -236,6 +212,17 @@ local function render_screensaver(alpha)
 
     local margin_x, cur_y, badge_h
     local show_fs, ep_fs, tag_fs, meta_fs, gen_fs, ov_fs, ov_lh, ov_max_chars, dir_fs
+
+    -- Anti-Burn-In pixel micro-drift (OLED protection, opt-in)
+    local drift_x = 0
+    local drift_y = 0
+    local anti_burnin_opt = user_opts.screensaver_anti_burnin
+    if anti_burnin_opt == true or anti_burnin_opt == 'yes' then
+        local now_t = mp.get_time()
+        -- Ultra-subtle micro-drift (max 2-3px) preventing OLED static wear without distracting movement
+        drift_x = math.floor(math.sin(now_t * 0.02) * 3)
+        drift_y = math.floor(math.cos(now_t * 0.015) * 2)
+    end
 
     if tier == 1 then
         margin_x     = 50
@@ -295,6 +282,10 @@ local function render_screensaver(alpha)
     -- 2. Data extraction
     local td = tmdb_current
     local show_name = td and td.show_name or (function()
+        local s, _, _, y = tmdb_parse_title()
+        if s and s ~= '' then
+            return (y and y ~= '') and (s .. ' (' .. y .. ')') or s
+        end
         local raw = (mp.get_property('media-title') or mp.get_property('filename') or '')
             :gsub('%.', ' '):gsub('_', ' '):gsub('%b[]', '')
         local sn = raw:match('^(.-)[%s]-[Ss]%d+[Ee]%d+') or raw:match('^(.-[%a]) %d%d%d%d') or raw
@@ -309,10 +300,16 @@ local function render_screensaver(alpha)
     local rating_str   = td and td.rating       or ''
     local cert_str     = td and td.cert         or ''
     local season_ep    = td and td.season_ep    or (function()
-        local s, e = (mp.get_property('media-title') or ''):match('[Ss](%d+)[Ee](%d+)')
-        return (s and e) and string.format('S%02d E%02d', tonumber(s), tonumber(e)) or ''
+        local _, s, e, _ = tmdb_parse_title()
+        if s and e then
+            return string.format('S%02d E%02d', tonumber(s), tonumber(e))
+        end
+        local s_raw, e_raw = (mp.get_property('media-title') or ''):match('[Ss](%d+)[Ee](%d+)')
+        return (s_raw and e_raw) and string.format('S%02d E%02d', tonumber(s_raw), tonumber(e_raw)) or ''
     end)()
     local overview     = td and td.overview     or ''
+    local cast         = td and td.cast         or ''
+    local studio       = td and td.studio       or ''
 
     -- 3. Logo or Fallback Text Title
     local logo_info = nil
@@ -327,7 +324,8 @@ local function render_screensaver(alpha)
     -- Overview text wrapping pre-calculation
     local words = {}
     if overview ~= '' then
-        for word in overview:gmatch('%S+') do table.insert(words, word) end
+        local safe_overview = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(overview) or overview
+        for word in safe_overview:gmatch('%S+') do table.insert(words, word) end
     end
     local lines = {}
     local cur_l = ''
@@ -380,6 +378,10 @@ local function render_screensaver(alpha)
                 table.insert(rows, {label = 'Release Date', val = rel_d})
             end
 
+            if studio ~= '' then
+                table.insert(rows, {label = 'Studio', val = studio})
+            end
+
             if tier >= 2 then
                 local b_str = format_currency(td.budget)
                 if b_str then
@@ -390,15 +392,15 @@ local function render_screensaver(alpha)
                     table.insert(rows, {label = 'Revenue', val = r_str})
                 end
 
-                if #rows < 4 and td.seasons_count then
+                if #rows < 6 and td.seasons_count then
                     local s_txt = td.seasons_count .. (td.seasons_count == 1 and ' Season' or ' Seasons')
                     if td.episodes_count then s_txt = s_txt .. ' (' .. td.episodes_count .. ' Ep)' end
                     table.insert(rows, {label = 'Seasons', val = s_txt})
                 end
-                if #rows < 5 and td.status and td.status ~= '' then
+                if #rows < 6 and td.status and td.status ~= '' then
                     table.insert(rows, {label = 'Status', val = td.status})
                 end
-                if #rows < 5 and td.network and td.network ~= '' then
+                if #rows < 6 and td.network and td.network ~= '' and td.network ~= studio then
                     table.insert(rows, {label = 'Network', val = td.network})
                 end
             end
@@ -406,9 +408,6 @@ local function render_screensaver(alpha)
             -- Offline / No-TMDB Ambient Info Card
             local curr_path = mp.get_property('path', '')
             local is_stream = (utils_mod and utils_mod.is_url and utils_mod.is_url(curr_path))
-                or (curr_path:find('^%a[%w+.-]*://') ~= nil)
-                or (curr_path:find('^ytdl://') ~= nil)
-                or (curr_path:find('^magnet:') ~= nil)
             if is_stream then
                 local domain = curr_path:match('^%a[%w+.-]*://([^/]+)') or 'Stream'
                 table.insert(rows, {label = 'Source', val = domain:gsub('^www%.', '')})
@@ -432,10 +431,8 @@ local function render_screensaver(alpha)
                 table.insert(rows, {label = 'Audio', val = a_info})
             end
 
-            local w = mp.get_property_number('width')
-            local h = mp.get_property_number('height')
-            if w and h and w > 0 and h > 0 then
-                local res_label = (w >= 3800 or h >= 2100) and '4K UHD' or ((w >= 1900 or h >= 1000) and '1080p FHD' or (h .. 'p'))
+            local res_label = utils_mod and utils_mod.get_resolution_label and utils_mod.get_resolution_label()
+            if res_label then
                 table.insert(rows, {label = 'Quality', val = res_label})
             end
         end
@@ -465,18 +462,27 @@ local function render_screensaver(alpha)
             est_h = est_h + (#lines * ov_lh) + 12
         end
         if director ~= '' then
-            est_h = est_h + math.floor(dir_fs * 1.4) + 14
+            est_h = est_h + math.floor(dir_fs * 1.4) + 4
+        end
+        if cast ~= '' then
+            est_h = est_h + math.floor(dir_fs * 1.4) + 12
+        elseif director ~= '' then
+            est_h = est_h + 10
         end
         if #rows > 0 then
             local row_h = (tier == 3) and 42 or ((tier == 2) and 36 or 30)
             local card_h = (#rows * row_h) + 16
             est_h = est_h + card_h + 16
         end
-        cur_y = math.max(40, math.floor((VIRTUAL_H - est_h) / 2))
+        cur_y = math.max(40, math.floor((VIRTUAL_H - est_h) / 2)) + drift_y
     elseif is_split then
         local max_container_w = (tier == 3) and 1320 or 1080
         local container_w = math.min(VIRTUAL_W - 80, max_container_w)
-        margin_x = math.floor((VIRTUAL_W - container_w) / 2)
+        margin_x = math.floor((VIRTUAL_W - container_w) / 2) + drift_x
+        cur_y = cur_y + drift_y
+    else
+        margin_x = margin_x + drift_x
+        cur_y = cur_y + drift_y
     end
     local start_cur_y = cur_y
 
@@ -487,7 +493,7 @@ local function render_screensaver(alpha)
             local actual_h = logo_info.h
             local actual_x
             if is_center then
-                actual_x = math.floor((osd_w - actual_w) / 2)
+                actual_x = math.floor((osd_w - actual_w) / 2) + math.floor(drift_x * scale_x)
             else
                 actual_x = math.floor(margin_x * scale_x)
             end
@@ -502,7 +508,7 @@ local function render_screensaver(alpha)
         if logo_info.is_backdrop then
             ass:new_event()
             if is_center then
-                ass:pos(VIRTUAL_W / 2, cur_y)
+                ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
                 ass:an(8)
             else
                 ass:pos(margin_x, cur_y)
@@ -511,14 +517,14 @@ local function render_screensaver(alpha)
             ass:append(string.format(
                 '{\\fnInter\\b700\\fs%d\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
                 show_fs, a_hex))
-            ass:append(show_name)
+            ass:append(utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(show_name) or show_name)
             cur_y = cur_y + math.floor(show_fs * 1.35) + 6
         end
     else
         ss_remove_logo()
         ass:new_event()
         if is_center then
-            ass:pos(VIRTUAL_W / 2, cur_y)
+            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
             ass:an(8)
         else
             ass:pos(margin_x, cur_y)
@@ -527,7 +533,7 @@ local function render_screensaver(alpha)
         ass:append(string.format(
             '{\\fnInter\\b700\\fs%d\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
             show_fs, a_hex))
-        ass:append(show_name)
+        ass:append(utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(show_name) or show_name)
         cur_y = cur_y + math.floor(show_fs * 1.35) + 6
     end
 
@@ -535,7 +541,7 @@ local function render_screensaver(alpha)
     if ep_title ~= '' then
         ass:new_event()
         if is_center then
-            ass:pos(VIRTUAL_W / 2, cur_y)
+            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
             ass:an(8)
         else
             ass:pos(margin_x, cur_y)
@@ -543,12 +549,12 @@ local function render_screensaver(alpha)
         end
         ass:append(string.format(
             '{\\fnInter\\b700\\fs%d\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad0\\q2}', ep_fs, a_hex))
-        ass:append(ep_title)
+        ass:append(utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(ep_title) or ep_title)
         cur_y = cur_y + math.floor(ep_fs * 1.35) + 8
     elseif tagline ~= '' then
         ass:new_event()
         if is_center then
-            ass:pos(VIRTUAL_W / 2, cur_y)
+            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
             ass:an(8)
         else
             ass:pos(margin_x, cur_y)
@@ -556,7 +562,8 @@ local function render_screensaver(alpha)
         end
         ass:append(string.format(
             '{\\fnInter\\b400\\i1\\fs%d\\1c&H9E9EA8&\\1a&H%s&\\bord0\\shad0\\q2}', tag_fs, a_hex))
-        ass:append('“' .. tagline .. '”')
+        local safe_tag = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(tagline) or tagline
+        ass:append('“' .. safe_tag .. '”')
         cur_y = cur_y + math.floor(tag_fs * 1.4) + 8
     end
 
@@ -574,7 +581,7 @@ local function render_screensaver(alpha)
     -- Badges: Certification pill + Media codec badges (inline with tight gap)
     local inline_badges = {}
     if cert_str ~= '' then
-        table.insert(inline_badges, {text = cert_str, fg = 'D8D8E0', bg = '242220', bord = '554E48', w = #cert_str * 8})
+        table.insert(inline_badges, {text = cert_str, fg = 'EAE4DC', bg = '08080A', bord = 'EAE4DC', w = #cert_str * 8})
     end
     local media_badges = collect_media_badges()
     for _, mb in ipairs(media_badges) do
@@ -589,7 +596,7 @@ local function render_screensaver(alpha)
     local meta_start_x
     local badges_start_x
     if is_center then
-        meta_start_x = math.floor((VIRTUAL_W - total_row_w) / 2)
+        meta_start_x = math.floor((VIRTUAL_W - total_row_w) / 2) + drift_x
         badges_start_x = meta_start_x + meta_w + row_gap
     else
         meta_start_x = margin_x
@@ -615,7 +622,7 @@ local function render_screensaver(alpha)
     if genres ~= '' then
         ass:new_event()
         if is_center then
-            ass:pos(VIRTUAL_W / 2, cur_y)
+            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
             ass:an(8)
         else
             ass:pos(margin_x, cur_y)
@@ -631,7 +638,7 @@ local function render_screensaver(alpha)
     if #lines > 0 then
         ass:new_event()
         if is_center then
-            ass:pos(VIRTUAL_W / 2, cur_y)
+            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
             ass:an(8)
         else
             ass:pos(margin_x, cur_y)
@@ -644,11 +651,11 @@ local function render_screensaver(alpha)
         cur_y = cur_y + (#lines * ov_lh) + 12
     end
 
-    -- 8. Director / Creator (Elevated contrast: refined slate gray)
+    -- 8. Director / Creator & Cast (Elevated contrast)
     if director ~= '' then
         ass:new_event()
         if is_center then
-            ass:pos(VIRTUAL_W / 2, cur_y)
+            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
             ass:an(8)
         else
             ass:pos(margin_x, cur_y)
@@ -656,8 +663,27 @@ local function render_screensaver(alpha)
         end
         ass:append(string.format(
             '{\\fnInter\\b500\\fs%d\\1c&HA5958E&\\1a&H%s&\\bord0\\shad0}', dir_fs, a_hex))
-        ass:append('Directed by ' .. director)
-        cur_y = cur_y + math.floor(dir_fs * 1.4) + 14
+        local safe_dir = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(director) or director
+        ass:append('Directed by ' .. safe_dir)
+        cur_y = cur_y + math.floor(dir_fs * 1.4) + 4
+    end
+
+    if cast ~= '' then
+        ass:new_event()
+        if is_center then
+            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
+            ass:an(8)
+        else
+            ass:pos(margin_x, cur_y)
+            ass:an(7)
+        end
+        ass:append(string.format(
+            '{\\fnInter\\b500\\fs%d\\1c&H9E9EA8&\\1a&H%s&\\bord0\\shad0}', math.max(10, dir_fs - 1), a_hex))
+        local safe_cast = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(cast) or cast
+        ass:append('< ' .. safe_cast .. ' >')
+        cur_y = cur_y + math.floor(dir_fs * 1.4) + 12
+    elseif director ~= '' then
+        cur_y = cur_y + 10
     end
 
     -- 9. Info Card (Runtime, Language, Release Date, Seasons, Status)
@@ -672,7 +698,7 @@ local function render_screensaver(alpha)
 
         if is_center then
             card_w = (tier == 3) and 420 or ((tier == 2) and 360 or 280)
-            card_x = math.floor((VIRTUAL_W - card_w) / 2)
+            card_x = math.floor((VIRTUAL_W - card_w) / 2) + drift_x
             card_y = cur_y + 4
         elseif is_split then
             local max_container_w = (tier == 3) and 1320 or 1080
@@ -688,22 +714,29 @@ local function render_screensaver(alpha)
         end
 
         -- Card background pill (frosted obsidian with subtle specular border)
+        local card_bg_alpha = utils_mod and utils_mod.mult_alpha and utils_mod.mult_alpha(0x18, alpha) or 0x38
+        local card_rim_alpha = utils_mod and utils_mod.mult_alpha and utils_mod.mult_alpha(0xD8, alpha) or 0x60
+        local card_bg_hex = string.format('%02X', card_bg_alpha)
+        local card_rim_hex = string.format('%02X', card_rim_alpha)
+
         ass:new_event()
         ass:pos(0, 0)
         ass:an(7)
         ass:append(string.format(
-            '{\\blur0\\bord1\\1c&H121216&\\1a&H38&\\3c&H404048&\\3a&H60&}', a_hex))
+            '{\\blur0\\bord1.2\\1c&H121210&\\1a&H%s&\\3c&HFFFFFF&\\3a&H%s&}', card_bg_hex, card_rim_hex))
         ass:draw_start()
         ass:round_rect_cw(card_x, card_y, card_x + card_w, card_y + card_h, r)
         ass:draw_stop()
 
         -- Hairline dividers between rows
+        local div_alpha = utils_mod and utils_mod.mult_alpha and utils_mod.mult_alpha(0xE8, alpha) or 0x40
+        local div_hex = string.format('%02X', div_alpha)
         for i = 1, #rows - 1 do
             local dy = card_y + 8 + (i * row_h)
             ass:new_event()
             ass:pos(0, 0)
             ass:an(7)
-            ass:append(string.format('{\\blur0\\bord0\\1c&H2E2E36&\\1a&H40&}', a_hex))
+            ass:append(string.format('{\\blur0\\bord0\\1c&HFFFFFF&\\1a&H%s&}', div_hex))
             ass:draw_start()
             ass:rect_cw(card_x + 14, dy, card_x + card_w - 14, dy + 1)
             ass:draw_stop()
@@ -764,6 +797,14 @@ local function ss_fade_step()
         render_screensaver(0)
         if ss_fade_timer then ss_fade_timer:kill(); ss_fade_timer = nil end
         ss_schedule_next_minute()
+        local anti_burnin_opt = user_opts.screensaver_anti_burnin
+        if not ss_burnin_timer and (anti_burnin_opt == true or anti_burnin_opt == 'yes') then
+            ss_burnin_timer = mp.add_periodic_timer(20, function()
+                if ss_active and not ss_hiding and ss_alpha == 0 then
+                    render_screensaver(0)
+                end
+            end)
+        end
         return
     end
     local ease = t * t
@@ -775,6 +816,7 @@ local function ss_fade_out_step()
     local t = (mp.get_time() - ss_fade_start) / SS_OUT_DUR
     if t >= 1.0 then
         if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
+        if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
         ss_last_ends_t = nil
         ss_active = false
         ss_hiding = false
@@ -801,10 +843,12 @@ ss_hide = function(immediate)
     if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
     if ss_fade_timer  then ss_fade_timer:kill();  ss_fade_timer  = nil end
     if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
+    if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
     ss_last_ends_t = nil
 
     if immediate or not ss_active or not mp.get_property_native('pause') then
         if ss_fade_out_timer then ss_fade_out_timer:kill(); ss_fade_out_timer = nil end
+        if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
         ss_active = false
         ss_hiding = false
         ss_overlay:remove()
@@ -980,12 +1024,15 @@ local function purge_logo_from_disk(show_id)
     end)
 end
 
+local CURRENT_META_VERSION = 3
+
 local function save_meta_to_disk(key, data)
     pcall(function()
         local cdir = ensure_cache_dir()
         local path = string.format('%s/meta_%s.json', cdir, safe_cache_filename(key))
         local f = io.open(path, 'w')
         if f then
+            data.meta_v = CURRENT_META_VERSION
             f:write(utils.format_json(data))
             f:close()
         end
@@ -1011,7 +1058,129 @@ local function load_meta_from_disk(key)
     return ok and res or nil
 end
 
-local function fetch_tmdb_logo(search_type, show_id, cb)
+local function filter_and_format_studios(companies, networks)
+    if not companies and not networks then return '' end
+
+    local blacklist = {
+        '^story$',
+        '^story%s*inc%.?$',
+        '^the story factory$',
+        'film partners',
+        'production committee',
+        'committee',
+        '製作委員会',
+        'seisaku iinkai',
+        '^jeki$',
+        'lawson entertainment',
+        'holdings?$',
+        'financing$',
+    }
+
+    local function is_blacklisted(name)
+        if not name or name == '' then return true end
+        local lower = name:lower()
+        for _, pat in ipairs(blacklist) do
+            if lower:find(pat) then return true end
+        end
+        if lower:find('partners') and (lower:find('^".*"$') or lower:find('film')) then
+            return true
+        end
+        return false
+    end
+
+    local major_studios = {
+        'toho', 'comix wave', 'studio ghibli', 'kyoto animation', 'ufotable',
+        'mappa', 'wit studio', 'bones', 'madhouse', 'cloverworks', 'a%-1 pictures',
+        'production i%.g', 'sunrise', 'bandai namco', 'shaft', 'trigger',
+        'david production', 'pierrot', 'tms entertainment', 'toei animation',
+        'toei company', 'shochiku', 'kadokawa', 'aniplex', 'twin engine',
+        'science saru', 'p%.a%.%s*works', 'doga kobo', 'j%.c%.%s*staff',
+        'amazon mgm', 'metro%-goldwyn%-mayer', 'mgm', 'amazon studios',
+        'warner bros', 'new line cinema', 'universal pictures', 'focus features',
+        'paramount', 'walt disney', 'pixar', 'marvel studios', 'lucasfilm',
+        '20th century', 'searchlight pictures', 'columbia pictures', 'sony pictures',
+        'tristar', 'a24', 'working title', 'studiocanal', 'lionsgate',
+        'blumhouse', 'dreamworks', 'illumination', 'legendary', 'miramax',
+        'neon', 'bad robot', 'apple studios', 'apple original films', 'netflix',
+        'hbo', 'bbc film', 'bbc studios'
+    }
+
+    local function is_major_studio(name)
+        local lower = name:lower()
+        for _, pat in ipairs(major_studios) do
+            if lower:find(pat) then return true end
+        end
+        return false
+    end
+
+    local candidates = {}
+    if companies and #companies > 0 then
+        for i, p in ipairs(companies) do
+            local name = p.name
+            if name and name ~= '' and not is_blacklisted(name) then
+                local score = 0
+                if is_major_studio(name) then
+                    score = score + 60
+                end
+                if p.logo_path and p.logo_path ~= '' then
+                    score = score + 20
+                end
+                score = score + math.max(0, 20 - (i * 2))
+
+                table.insert(candidates, {
+                    name = name,
+                    score = score,
+                    orig_idx = i
+                })
+            end
+        end
+
+        table.sort(candidates, function(a, b)
+            if a.score ~= b.score then return a.score > b.score end
+            return a.orig_idx < b.orig_idx
+        end)
+    end
+
+    local picked = {}
+    local seen = {}
+    for _, c in ipairs(candidates) do
+        if #picked < 2 and not seen[c.name] then
+            seen[c.name] = true
+            table.insert(picked, c.name)
+        end
+    end
+
+    -- If blacklisting filtered everything out (rare), fallback to first non-empty company
+    if #picked == 0 and companies and #companies > 0 then
+        for _, p in ipairs(companies) do
+            if p.name and p.name ~= '' and not seen[p.name] then
+                seen[p.name] = true
+                table.insert(picked, p.name)
+                if #picked >= 2 then break end
+            end
+        end
+    end
+
+    if #picked == 0 and networks and #networks > 0 then
+        for _, net in ipairs(networks) do
+            if net.name and net.name ~= '' and not is_blacklisted(net.name) and not seen[net.name] then
+                seen[net.name] = true
+                table.insert(picked, net.name)
+                if #picked >= 2 then break end
+            end
+        end
+    end
+
+    return table.concat(picked, '  ·  ')
+end
+
+
+local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
+    if type(orig_lang) == 'function' then
+        cb = orig_lang
+        orig_lang = nil
+    end
+
     local key = user_opts.tmdb_api_key
     if not key or key == '' then cb(nil); return end
 
@@ -1046,9 +1215,14 @@ local function fetch_tmdb_logo(search_type, show_id, cb)
         end
     end
 
+    local lang_param = 'en,null,ja,ko,zh,fr,de,es,it'
+    if orig_lang and orig_lang ~= '' and not lang_param:find(orig_lang, 1, true) then
+        lang_param = lang_param .. ',' .. orig_lang
+    end
+
     local images_url = string.format(
-        'https://api.tmdb.org/3/%s/%d/images?api_key=%s',
-        search_type, show_id, key
+        'https://api.tmdb.org/3/%s/%d/images?api_key=%s&include_image_language=%s',
+        search_type, show_id, key, lang_param
     )
     safe_async_cmd({
         name = 'subprocess',
@@ -1080,10 +1254,17 @@ local function fetch_tmdb_logo(search_type, show_id, cb)
         end
 
         if #candidates > 0 then
+            local pref_lang = user_opts.screensaver_logo_lang or 'auto'
             table.sort(candidates, function(a, b)
-                local a_en = (a.iso_639_1 == 'en')
-                local b_en = (b.iso_639_1 == 'en')
-                if a_en ~= b_en then return a_en end
+                if pref_lang == 'original' and orig_lang and orig_lang ~= '' then
+                    local a_orig = (a.iso_639_1 == orig_lang)
+                    local b_orig = (b.iso_639_1 == orig_lang)
+                    if a_orig ~= b_orig then return a_orig end
+                else
+                    local a_en = (a.iso_639_1 == 'en')
+                    local b_en = (b.iso_639_1 == 'en')
+                    if a_en ~= b_en then return a_en end
+                end
 
                 local ar_a = a.aspect_ratio or (a.width and a.height and a.height > 0 and (a.width / a.height)) or 0
                 local ar_b = b.aspect_ratio or (b.width and b.height and b.height > 0 and (b.width / b.height)) or 0
@@ -1262,10 +1443,7 @@ local function fetch_tmdb_data(force_refresh)
 
     -- URL Guard: Skip TMDB searches on network streams (YouTube, Twitch, RTMP, etc.)
     local curr_path = mp.get_property('path', '')
-    local is_url = (utils_mod and utils_mod.is_url and utils_mod.is_url(curr_path))
-        or (curr_path:find('^%a[%w+.-]*://') ~= nil)
-        or (curr_path:find('^ytdl://') ~= nil)
-        or (curr_path:find('^magnet:') ~= nil)
+    local is_url = utils_mod and utils_mod.is_url and utils_mod.is_url(curr_path)
     if is_url then return end
 
     local show, season, episode, parsed_year = tmdb_parse_title()
@@ -1304,7 +1482,7 @@ local function fetch_tmdb_data(force_refresh)
                 disk_cached.logo_retry = true
                 local is_tv = (disk_cached.season_ep and disk_cached.season_ep ~= '')
                 local search_type = is_tv and 'tv' or 'movie'
-                fetch_tmdb_logo(search_type, disk_cached.show_id, function(logos_tbl, is_bd)
+                fetch_tmdb_logo(search_type, disk_cached.show_id, disk_cached.language, function(logos_tbl, is_bd)
                     if logos_tbl then
                         disk_cached.logos = logos_tbl
                         local def_logo = logos_tbl[2] or logos_tbl[1]
@@ -1316,6 +1494,15 @@ local function fetch_tmdb_data(force_refresh)
                         if ss_active then render_screensaver(ss_alpha) end
                     end
                 end)
+            end
+            if disk_cached.show_id and ((disk_cached.meta_v or 0) < CURRENT_META_VERSION or disk_cached.studio == nil or disk_cached.studio == '' or disk_cached.cast == nil) and not disk_cached.meta_upgraded then
+                disk_cached.meta_upgraded = true
+                purge_meta_from_disk(cache_key)
+                if disk_cached.show_id then
+                    purge_logo_from_disk(disk_cached.show_id)
+                end
+                fetch_tmdb_data(true)
+                return
             end
             return
         end
@@ -1356,6 +1543,8 @@ local function fetch_tmdb_data(force_refresh)
                 local cert = ''
                 local genres_list = {}
                 local director_str = ''
+                local cast_str = ''
+                local studio_str = ''
                 if det then
                     if det.runtime and det.runtime > 0 then
                         local h_r = math.floor(det.runtime / 60)
@@ -1388,6 +1577,17 @@ local function fetch_tmdb_data(force_refresh)
                             end
                         end
                     end
+                    local cast_list = {}
+                    if det.credits and det.credits.cast then
+                        for _, actor in ipairs(det.credits.cast) do
+                            if #cast_list < 4 and actor.name and actor.name ~= '' then
+                                table.insert(cast_list, actor.name)
+                            end
+                        end
+                    end
+                    cast_str = table.concat(cast_list, '  ·  ')
+
+                    studio_str = filter_and_format_studios(det.production_companies, nil)
                 end
 
                 local result = {
@@ -1398,6 +1598,8 @@ local function fetch_tmdb_data(force_refresh)
                     tagline      = (det and det.tagline and det.tagline ~= '') and det.tagline or '',
                     genres       = table.concat(genres_list, '  ·  '),
                     director     = director_str,
+                    cast         = cast_str,
+                    studio       = studio_str,
                     year         = year or '',
                     duration     = dur_str,
                     rating       = rating_s,
@@ -1417,7 +1619,7 @@ local function fetch_tmdb_data(force_refresh)
                 tmdb_current = result
                 if ss_active then render_screensaver(ss_alpha) end
 
-                fetch_tmdb_logo('movie', show_id, function(logos_tbl, is_bd)
+                fetch_tmdb_logo('movie', show_id, result.language, function(logos_tbl, is_bd)
                     tmdb_fetching = false
                     if logos_tbl then
                         result.logos = logos_tbl
@@ -1482,6 +1684,18 @@ local function fetch_tmdb_data(force_refresh)
                     dur_str = ep.runtime .. 'm'
                 end
 
+                local cast_list = {}
+                if tv_det and tv_det.credits and tv_det.credits.cast then
+                    for _, actor in ipairs(tv_det.credits.cast) do
+                        if #cast_list < 4 and actor.name and actor.name ~= '' then
+                            table.insert(cast_list, actor.name)
+                        end
+                    end
+                end
+                local cast_str = table.concat(cast_list, '  ·  ')
+
+                local studio_str = filter_and_format_studios(tv_det.production_companies, tv_det.networks)
+
                 local result = {
                     show_id        = show_id,
                     cache_key      = cache_key,
@@ -1490,6 +1704,8 @@ local function fetch_tmdb_data(force_refresh)
                     tagline        = (tv_det and tv_det.tagline and tv_det.tagline ~= '') and tv_det.tagline or '',
                     genres         = table.concat(genres_list, '  ·  '),
                     director       = director_str,
+                    cast           = cast_str,
+                    studio         = studio_str,
                     year           = year or '',
                     duration       = dur_str,
                     rating         = rating_s,
@@ -1510,7 +1726,7 @@ local function fetch_tmdb_data(force_refresh)
                 tmdb_current = result
                 if ss_active then render_screensaver(ss_alpha) end
 
-                fetch_tmdb_logo('tv', show_id, function(logos_tbl, is_bd)
+                fetch_tmdb_logo('tv', show_id, item.original_language, function(logos_tbl, is_bd)
                     tmdb_fetching = false
                     if logos_tbl then
                         result.logos = logos_tbl
@@ -1528,6 +1744,33 @@ local function fetch_tmdb_data(force_refresh)
     end
 
     local function handle_search_results(data)
+        local function try_alt_search()
+            local mt = mp.get_property('media-title')
+            local alt_show, _, _, alt_yr = (utils_mod and utils_mod.parse_clean_title and mt and mt ~= '' and mt ~= show) and utils_mod.parse_clean_title(mt) or nil
+            if alt_show and alt_show ~= '' and alt_show ~= show then
+                local alt_url = string.format(
+                    'https://api.tmdb.org/3/search/movie?api_key=%s&query=%s%s&page=1',
+                    key,
+                    tmdb_url_encode(alt_show),
+                    alt_yr and ('&year=' .. alt_yr) or ''
+                )
+                safe_async_cmd({
+                    name = 'subprocess',
+                    args = {'curl', '-s', '-4', '--connect-timeout', '3', '--retry', '3', '--retry-all-errors', '--max-time', '8', alt_url},
+                    capture_stdout = true,
+                }, function(ok_alt, res_alt)
+                    local data_alt = (ok_alt and res_alt and res_alt.stdout) and utils.parse_json(res_alt.stdout) or nil
+                    if data_alt and data_alt.results and #data_alt.results > 0 then
+                        on_search_item(data_alt.results[1])
+                    else
+                        tmdb_fetching = false
+                    end
+                end)
+                return true
+            end
+            return false
+        end
+
         if not data or not data.results or #data.results == 0 then
             -- Fallback: if search with year returned nothing, retry once without year constraint
             if not is_tv and parsed_year then
@@ -1543,6 +1786,7 @@ local function fetch_tmdb_data(force_refresh)
                 }, function(ok_r, res_r)
                     local data_r = (ok_r and res_r and res_r.stdout) and utils.parse_json(res_r.stdout) or nil
                     if not data_r or not data_r.results or #data_r.results == 0 then
+                        if try_alt_search() then return end
                         tmdb_fetching = false
                         return
                     end
@@ -1564,6 +1808,7 @@ local function fetch_tmdb_data(force_refresh)
                     }, function(ok_r, res_r)
                         local data_r = (ok_r and res_r and res_r.stdout) and utils.parse_json(res_r.stdout) or nil
                         if not data_r or not data_r.results or #data_r.results == 0 then
+                            if try_alt_search() then return end
                             tmdb_fetching = false
                             return
                         end
@@ -1572,6 +1817,7 @@ local function fetch_tmdb_data(force_refresh)
                     return
                 end
             end
+            if try_alt_search() then return end
             tmdb_fetching = false
             return
         end
@@ -1803,5 +2049,7 @@ function M.fetch_candidates(query, callback)
         if callback then callback(candidates) end
     end)
 end
+
+M.filter_and_format_studios = filter_and_format_studios
 
 return M
