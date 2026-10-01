@@ -74,10 +74,24 @@ function M.is_junk_title(t)
     if tl:find('www%.') or tl:find('%.com') or tl:find('%.org') or tl:find('%.net')
        or tl:find('%.meme') or tl:find('%.vip') or tl:find('%.in') or tl:find('%.co')
        or tl:find('%.tv') or tl:find('%.cc') or tl:find('%.to') or tl:find('%.link')
-       or tl:find('%.me') or tl:find('%.biz') or tl:find('%.info') or tl:find('%.ws') or tl:find('%.ph') then
+       or tl:find('%.me') or tl:find('%.biz') or tl:find('%.info') or tl:find('%.ws') or tl:find('%.ph')
+       or tl:find('%.mx') or tl:find('%.cx') or tl:find('%.pm') or tl:find('%.xyz') or tl:find('%.top')
+       or tl:find('%.site') or tl:find('%.online') or tl:find('%.club') then
         return true
     end
-    if tl:find('^downloaded') or tl:find('^torrent') or tl:find('1tamilmv') or tl:find('tamilblasters') or tl:find('tamilmv') then
+    if tl:find('^downloaded') or tl:find('^torrent') or tl:find('1tamilmv') or tl:find('tamilblasters')
+       or tl:find('tamilmv') or tl:find('tamilrockers') or tl:find('yts') or tl:find('yify')
+       or tl:find('rarbg') or tl:find('psa') or tl:find('galaxyrg') or tl:find('qxr')
+       or tl:find('tgx') or tl:find('eztv') or tl:find('ettv') or tl:find('opensubtitles')
+       or tl:find('subscene') or tl:find('as%-encodes') then
+        return true
+    end
+    -- Detect standalone scene/release junk tags left in container metadata
+    local stripped = tl:gsub('[%s%-_%.%[%]%(\\%)]+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
+    if stripped == 'hq clean' or stripped == 'clean' or stripped == 'predvd' or stripped == 'hdts'
+       or stripped == 'web dl' or stripped == 'webdl' or stripped == 'webrip' or stripped == 'bluray'
+       or stripped == 'hdtv' or stripped == 'dvdrip' or stripped == 'camrip' or stripped == 'hdrip'
+       or stripped == 'hq' or stripped == 'proper' or stripped == 'repack' then
         return true
     end
     return false

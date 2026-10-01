@@ -139,6 +139,10 @@ p                 script-binding LuminaX/menu-playlist
 c                 script-binding LuminaX/menu-chapters
 a                 script-binding LuminaX/menu-audio
 s                 script-binding LuminaX/menu-sub
+Alt+s             script-binding LuminaX/menu-sub-config
+V                 script-binding LuminaX/menu-video
+T                 script-binding LuminaX/toggle-tags-menu
+Ctrl+t            script-binding LuminaX/toggle-tags-menu-ctrl
 EOF
     fi
 fi

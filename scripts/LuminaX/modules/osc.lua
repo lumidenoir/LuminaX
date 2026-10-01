@@ -124,10 +124,13 @@ local icons = {
   volume = '\238\129\144',       -- volume_up
   volume_mute = '\238\129\143',  -- volume_off
   sub = '\238\129\136',          -- subtitles
+  video = '\238\136\168',        -- tune (video picture tuning)
   minimize = '\238\151\145',     -- fullscreen_exit
   fullscreen = '\238\151\144',   -- fullscreen
   info = '\238\162\142',         -- info
   playlist = '\238\129\159',     -- playlist_play
+  chapters = '\238\137\130',     -- format_list_bulleted
+  tags = '\238\149\142',         -- local_offer / tag
   pip = '\238\164\145',          -- picture_in_picture_alt
 }
 
@@ -321,9 +324,9 @@ function build_keyboard_controls()
 
     -- prepare the main button row
     local bottom_button_line = {}
-    table.insert(bottom_button_line, 'tog_playlist')
     table.insert(bottom_button_line, 'cy_audio')
     table.insert(bottom_button_line, 'cy_sub')
+    table.insert(bottom_button_line, 'tog_video')
     table.insert(bottom_button_line, 'pl_prev')
     table.insert(bottom_button_line, 'skipback')
     if user_opts.showjump then
@@ -335,8 +338,11 @@ function build_keyboard_controls()
     end
     table.insert(bottom_button_line, 'skipfrwd')
     table.insert(bottom_button_line, 'pl_next')
+    table.insert(bottom_button_line, 'tog_playlist')
+    table.insert(bottom_button_line, 'tog_chapters')
+    table.insert(bottom_button_line, 'tog_speed')
+    table.insert(bottom_button_line, 'tog_tags')
     table.insert(bottom_button_line, 'tog_info')
-    table.insert(bottom_button_line, 'tog_pip')
     table.insert(bottom_button_line, 'tog_fs')
 
     -- build up the main mapping object
@@ -1577,17 +1583,17 @@ local UI_OFFSET_Y = 0
     lo = add_layout('cy_audio')
     lo.geometry = {x = left_pad, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
-    elements['cy_audio'].visible = (osc_param.playresx >= 540)
+    elements['cy_audio'].visible = (osc_param.playresx >= 480)
 	
     lo = add_layout('cy_sub')
     lo.geometry = {x = left_pad + left_spacing, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
-    elements['cy_sub'].visible = (osc_param.playresx >= 600)
+    elements['cy_sub'].visible = (osc_param.playresx >= 540)
 
-    lo = add_layout('tog_playlist')
+    lo = add_layout('tog_video')
     lo.geometry = {x = left_pad + left_spacing * 2, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
-    elements['tog_playlist'].visible = (osc_param.playresx >= 540)
+    elements['tog_video'].visible = (osc_param.playresx >= 580)
 
     local vol_x = left_pad + left_spacing * 3
     lo = add_layout('vol_ctrl')
@@ -1599,7 +1605,7 @@ local UI_OFFSET_Y = 0
     local vbar_w = math.floor((is_compact and 55 or 70) * scale + 0.5)
 
     local vmode = user_opts.volume_slider_mode or 'hover'
-    local show_vbar = (osc_param.playresx >= 760) and user_opts.volumecontrol and (vmode ~= 'never')
+    local show_vbar = (osc_param.playresx >= 780) and user_opts.volumecontrol and (vmode ~= 'never')
 
     lo = new_element('volumebarbg', 'box')
     lo.visible = show_vbar
@@ -1617,24 +1623,41 @@ local UI_OFFSET_Y = 0
     lo.slider.tooltip_an = 2
     elements['volumebar'].visible = show_vbar
 
-    -- Right controls placement (symmetric from right edge)
+    -- Right controls placement (symmetric from right edge: FS, Info, Tags, Speed, Chapters, Playlist)
     local right_pad     = osc_geo.w - math.floor(36 * scale + 0.5)
-    local right_spacing = math.floor(46 * scale + 0.5)
+    local right_spacing = math.floor(44 * scale + 0.5)
+    local fs_speed      = math.floor(13 * scale + 0.5)
+    local style_speed   = string.format('{\\blur0\\bord0\\1c&HC7C7CC&\\3c&H161618&\\fs%d\\fn%s\\b700}', fs_speed, user_opts.font)
 
     lo = add_layout('tog_fs')
     lo.geometry = {x = right_pad, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
-    elements['tog_fs'].visible = (osc_param.playresx >= 540)
+    elements['tog_fs'].visible = (osc_param.playresx >= 500)
 
     lo = add_layout('tog_info')
     lo.geometry = {x = right_pad - right_spacing, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
-    elements['tog_info'].visible = (osc_param.playresx >= 600)
+    elements['tog_info'].visible = (osc_param.playresx >= 540)
 
-    lo = add_layout('tog_pip')
+    lo = add_layout('tog_tags')
     lo.geometry = {x = right_pad - right_spacing * 2, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
-    elements['tog_pip'].visible = (osc_param.playresx >= (is_compact and 860 or 680))
+    elements['tog_tags'].visible = (osc_param.playresx >= 660)
+
+    lo = add_layout('tog_speed')
+    lo.geometry = {x = right_pad - right_spacing * 3, y = refY - 40 + UI_OFFSET_Y, an = 5, w = math.floor(34 * scale + 0.5), h = ctrl3_h}
+    lo.style = style_speed
+    elements['tog_speed'].visible = (osc_param.playresx >= 720)
+
+    lo = add_layout('tog_chapters')
+    lo.geometry = {x = right_pad - right_spacing * 4, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
+    lo.style = style_ctrl3
+    elements['tog_chapters'].visible = (osc_param.playresx >= 580)
+
+    lo = add_layout('tog_playlist')
+    lo.geometry = {x = right_pad - right_spacing * 5, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
+    lo.style = style_ctrl3
+    elements['tog_playlist'].visible = (osc_param.playresx >= 620)
 
     -- Center playback cluster
     local have_ch = (mp.get_property_number('chapters', 0) > 0)
@@ -2058,6 +2081,22 @@ function osc_init()
                 menu_open('sub')
             end
         end
+
+    -- tog_video
+    ne = new_element('tog_video', 'button')
+    ne.content = icons.video
+    ne.tooltip_style = osc_styles.Tooltip
+    ne.tooltip_an = 2
+    ne.tooltip_text = 'Video Adjustments (V)'
+    ne.eventresponder['mbtn_left_up'] =
+        function ()
+            if state.menu_active == 'video' then
+                menu_close()
+            else
+                menu_open('video')
+            end
+        end
+
     -- vol_ctrl
     ne = new_element('vol_ctrl', 'button')
     ne.enabled = (get_track('audio')>0)
@@ -2077,7 +2116,7 @@ function osc_init()
     ne.eventresponder["wheel_down_press"] =
         function () mp.commandv("osd-auto", "add", "volume", -5) end
     
-    --tog_fs
+    -- tog_fs
     ne = new_element('tog_fs', 'button')
     ne.content = function ()
         if (state.fullscreen) then
@@ -2086,44 +2125,106 @@ function osc_init()
             return (icons.fullscreen)
         end
     end
-    ne.visible = (osc_param.playresx >= 540)
+    ne.visible = (osc_param.playresx >= 500)
+    ne.tooltip_style = osc_styles.Tooltip
+    ne.tooltipF = 'Fullscreen (F)'
     ne.eventresponder['mbtn_left_up'] =
         function () mp.commandv('cycle', 'fullscreen') end
 
-    --tog_info
+    -- tog_info
     ne = new_element('tog_info', 'button')
     ne.content = icons.info
-    ne.visible = (osc_param.playresx >= 600)
+    ne.visible = (osc_param.playresx >= 540)
+    ne.tooltip_style = osc_styles.Tooltip
+    ne.tooltipF = 'Media Information & Stats (I)'
     ne.eventresponder['mbtn_left_up'] =
         function () mp.commandv('script-binding', 'stats/display-stats-toggle') end
 
-    -- tog_playlist (new: opens playlist menu)
-    ne = new_element('tog_playlist', 'button')
-    ne.content = icons.playlist
-    ne.visible = (osc_param.playresx >= 540)
+    -- tog_tags
+    ne = new_element('tog_tags', 'button')
+    ne.content = icons.tags or '\238\149\142'
+    ne.visible = (osc_param.playresx >= 660)
     ne.tooltip_style = osc_styles.Tooltip
-    ne.tooltipF = 'Playlist'
+    ne.tooltipF = 'Metadata & Tag Editor (T)'
     ne.eventresponder['mbtn_left_up'] =
         function ()
-            if state.menu_active == 'playlist' then
+            if state.menu_active == 'tags' then
                 menu_close()
             else
-                menu_open('playlist')
+                menu_open('tags')
             end
         end
 
-    -- tog_pip (repurposed: show chapter list menu)
-    ne = new_element('tog_pip', 'button')
-    ne.content = icons.pip
-    ne.visible = (osc_param.playresx >= 600)
+    -- tog_speed
+    ne = new_element('tog_speed', 'button')
+    ne.visible = (osc_param.playresx >= 720)
     ne.tooltip_style = osc_styles.Tooltip
-    ne.tooltipF = 'Chapters'
+    ne.tooltipF = 'Playback Speed (Click: Cycle, Right: Reset 1.0×, Scroll: ±0.1×)'
+    ne.content = function ()
+        local spd = mp.get_property_number('speed', 1.0) or 1.0
+        if math.abs(spd - 1.0) < 0.01 then
+            return '1.0×'
+        else
+            return string.format('%.2f×', spd):gsub('0×$', '×')
+        end
+    end
+    ne.eventresponder['mbtn_left_up'] = function ()
+        local spd = mp.get_property_number('speed', 1.0) or 1.0
+        local speeds = {1.0, 1.25, 1.5, 2.0, 0.75}
+        local next_spd = 1.25
+        for i, s in ipairs(speeds) do
+            if math.abs(spd - s) < 0.05 then
+                next_spd = speeds[(i % #speeds) + 1]
+                break
+            end
+        end
+        mp.set_property_number('speed', next_spd)
+        mp.osd_message(string.format('Speed: %.2f×', next_spd), 1.5)
+    end
+    ne.eventresponder['mbtn_right_up'] = function ()
+        mp.set_property_number('speed', 1.0)
+        mp.osd_message('Speed: 1.00× (Normal)', 1.5)
+    end
+    ne.eventresponder['wheel_up_press'] = function ()
+        local spd = mp.get_property_number('speed', 1.0) or 1.0
+        local next_spd = math.min(4.0, math.floor((spd + 0.1) * 10 + 0.5) / 10)
+        mp.set_property_number('speed', next_spd)
+        mp.osd_message(string.format('Speed: %.1f×', next_spd), 1.5)
+    end
+    ne.eventresponder['wheel_down_press'] = function ()
+        local spd = mp.get_property_number('speed', 1.0) or 1.0
+        local next_spd = math.max(0.2, math.floor((spd - 0.1) * 10 + 0.5) / 10)
+        mp.set_property_number('speed', next_spd)
+        mp.osd_message(string.format('Speed: %.1f×', next_spd), 1.5)
+    end
+
+    -- tog_chapters
+    ne = new_element('tog_chapters', 'button')
+    ne.content = icons.chapters or '\238\137\130'
+    ne.visible = (osc_param.playresx >= 580)
+    ne.tooltip_style = osc_styles.Tooltip
+    ne.tooltipF = 'Chapters (C)'
     ne.eventresponder['mbtn_left_up'] =
         function ()
             if state.menu_active == 'chapters' then
                 menu_close()
             else
                 menu_open('chapters')
+            end
+        end
+
+    -- tog_playlist
+    ne = new_element('tog_playlist', 'button')
+    ne.content = icons.playlist
+    ne.visible = (osc_param.playresx >= 620)
+    ne.tooltip_style = osc_styles.Tooltip
+    ne.tooltipF = 'Playlist (P)'
+    ne.eventresponder['mbtn_left_up'] =
+        function ()
+            if state.menu_active == 'playlist' then
+                menu_close()
+            else
+                menu_open('playlist')
             end
         end
 
@@ -2520,6 +2621,9 @@ end
 function osc_visible(visible)
     if state.osc_visible ~= visible then
         state.osc_visible = visible
+        if ctx_ref and ctx_ref.subtitle and ctx_ref.subtitle.update_overlay then
+            ctx_ref.subtitle.update_overlay()
+        end
     end
     request_tick()
 end
@@ -2813,7 +2917,9 @@ function render()
     render_input_box(ass)
 
     -- actual OSC
-    if state.osc_visible and not is_ss_active() then
+    local input_active = is_input_active and is_input_active()
+    local is_any_menu_active = (state and state.menu_active ~= nil) or (ctx_ref.menu and ctx_ref.menu.is_active and ctx_ref.menu.is_active())
+    if state.osc_visible and not is_ss_active() and not is_any_menu_active and not input_active then
         render_elements(ass)
     end
 
@@ -3481,6 +3587,9 @@ mp.add_key_binding(nil, 'menu-audio', function()
 end)
 mp.add_key_binding(nil, 'menu-sub', function()
     if state.menu_active == 'sub' then menu_close() else menu_open('sub') end
+end)
+mp.add_key_binding(nil, 'menu-video', function()
+    if state.menu_active == 'video' then menu_close() else menu_open('video') end
 end)
 mp.add_key_binding(nil, 'menu-tags', function()
     if state.menu_active == 'tags' then menu_close() else menu_open('tags') end

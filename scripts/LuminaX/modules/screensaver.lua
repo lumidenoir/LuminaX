@@ -17,7 +17,29 @@ local utils_mod    = nil
 
 local function tmdb_parse_title()
     if utils_mod and utils_mod.parse_clean_title then
-        return utils_mod.parse_clean_title(mp.get_property('media-title'), mp.get_property('filename'))
+        local fn = mp.get_property('filename')
+        local mt = mp.get_property('media-title')
+        local fp = mp.get_property('path')
+
+        -- 1. Try clean filename-derived title first (avoids leftover/junk metadata tags)
+        local fn_show, fn_s, fn_e, fn_yr = utils_mod.parse_clean_title(nil, fn, fp)
+        if fn_show and fn_show ~= '' and (fn_yr or (fn_s and fn_e)) then
+            return fn_show, fn_s, fn_e, fn_yr
+        end
+
+        -- 2. If filename has no year/season, check if media-title provides a clean title
+        if mt and mt ~= '' and mt ~= fn and not (utils_mod.is_junk_title and utils_mod.is_junk_title(mt)) then
+            local mt_show, mt_s, mt_e, mt_yr = utils_mod.parse_clean_title(mt, fn, fp)
+            if mt_show and mt_show ~= '' then
+                return mt_show, mt_s, mt_e, mt_yr
+            end
+        end
+
+        -- 3. Fallback to clean filename title even without year, or media-title
+        if fn_show and fn_show ~= '' then
+            return fn_show, fn_s, fn_e, fn_yr
+        end
+        return utils_mod.parse_clean_title(mt, fn, fp)
     end
     return mp.get_property('filename') or '', nil, nil, nil
 end
@@ -98,10 +120,8 @@ end
 -- ── helpers ──────────────────────────────────────────────────────────────────
 
 local function ss_remove_logo()
-    if ss_overlay_logo then
-        pcall(mp.commandv, 'overlay-remove', 1)
-        ss_overlay_logo = false
-    end
+    pcall(mp.commandv, 'overlay-remove', 1)
+    ss_overlay_logo = false
 end
 
 local function estimate_meta_width(meta_str, fs)
@@ -184,7 +204,7 @@ end
 
 local function render_screensaver(alpha)
     -- alpha: 0=fully opaque, 255=fully transparent (ASS convention)
-    if alpha >= 255 then
+    if alpha >= 255 or (state and state.menu_active) then
         ss_overlay:remove()
         ss_remove_logo()
         return
@@ -774,6 +794,9 @@ local function ss_fade_out_step()
 end
 
 ss_hide = function(immediate)
+    if immediate then
+        ss_remove_logo()
+    end
     if not ss_active and not ss_delay_timer and not ss_hiding then return end
     if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
     if ss_fade_timer  then ss_fade_timer:kill();  ss_fade_timer  = nil end
@@ -803,11 +826,14 @@ ss_hide = function(immediate)
     end
 end
 
+local is_menu_active_fn = nil
+
 activate_screensaver = function()
     if not user_opts.screensaver_enabled then return end
     if ss_active and not ss_hiding then return end
     if not mp.get_property_native('pause') then return end
     if state.menu_active or menu_closing then return end
+    if is_menu_active_fn and is_menu_active_fn() then return end
     hide_osc()
     if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
     ss_last_ends_t = nil
@@ -1616,6 +1642,7 @@ mp.observe_property('pause', 'bool', function(_, paused)
     if paused == nil then return end
     if paused then
         if not user_opts.screensaver_enabled then return end
+        if state.menu_active or (is_menu_active_fn and is_menu_active_fn()) then return end
         -- Debounce TMDB fetch to handle rapid pause/unpause toggles
         debounced_fetch_tmdb(0.25)
         -- Delay before screensaver activates
@@ -1638,6 +1665,10 @@ mp.observe_property('mouse-pos', 'native', function(_, mpos)
     if not mp.get_property_native('pause') then return end
     if not user_opts.screensaver_enabled then return end
     if not mpos then return end
+    if is_menu_active_fn and is_menu_active_fn() then
+        if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
+        return
+    end
 
     local mx, my = mpos.x, mpos.y
     if not last_ss_mx or not last_ss_my then
@@ -1684,12 +1715,13 @@ mp.observe_property('time-pos', 'number', function(_, pos)
 end)
 
 function M.init(ctx)
-    user_opts    = ctx.user_opts or {}
-    state        = ctx.state or {}
-    hide_osc     = ctx.hide_osc or function() end
-    show_osc     = ctx.show_osc or function() end
-    request_tick = ctx.request_tick or function() end
-    utils_mod    = ctx.utils
+    user_opts         = ctx.user_opts or {}
+    state             = ctx.state or {}
+    hide_osc          = ctx.hide_osc or function() end
+    show_osc          = ctx.show_osc or function() end
+    request_tick      = ctx.request_tick or function() end
+    utils_mod         = ctx.utils
+    is_menu_active_fn = ctx.is_menu_active
 end
 
 function M.is_active()
@@ -1712,7 +1744,8 @@ function M.inhibit()
     abort_all_subprocesses()
     if tmdb_debounce_timer then tmdb_debounce_timer:kill(); tmdb_debounce_timer = nil end
     if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
-    if ss_active and ss_hide then ss_hide() end
+    if ss_hide then ss_hide(true) end
+    ss_remove_logo()
 end
 
 function M.render(alpha)
@@ -1731,34 +1764,34 @@ function M.fetch_candidates(query, callback)
     end
 
     local q_enc = tmdb_url_encode(query)
-    local tv_url = string.format('https://api.tmdb.org/3/search/tv?api_key=%s&query=%s&page=1', key, q_enc)
-    local mv_url = string.format('https://api.tmdb.org/3/search/movie?api_key=%s&query=%s&page=1', key, q_enc)
+    local url = string.format('https://api.tmdb.org/3/search/multi?api_key=%s&query=%s&page=1', key, q_enc)
 
-    safe_async_cmd({
+    if not (mp and mp.command_native_async) then
+        if callback then callback({}) end
+        return
+    end
+
+    mp.command_native_async({
         name = 'subprocess',
-        args = {'curl', '-s', '-4', '--connect-timeout', '4', '--retry', '2', '--max-time', '8', tv_url},
+        playback_only = false,
+        args = {'curl', '-s', '-4', '--connect-timeout', '4', '--retry', '2', '--max-time', '8', url},
         capture_stdout = true,
-    }, function(ok_tv, res_tv)
-        local tv_data = (ok_tv and res_tv and res_tv.stdout) and utils.parse_json(res_tv.stdout) or nil
-        
-        safe_async_cmd({
-            name = 'subprocess',
-            args = {'curl', '-s', '-4', '--connect-timeout', '4', '--retry', '2', '--max-time', '8', mv_url},
-            capture_stdout = true,
-        }, function(ok_mv, res_mv)
-            local mv_data = (ok_mv and res_mv and res_mv.stdout) and utils.parse_json(res_mv.stdout) or nil
-            
-            local candidates = {}
-            if tv_data and tv_data.results then
-                for _, item in ipairs(tv_data.results) do
-                    if #candidates < 8 then
-                        local year_raw = item.first_air_date or ''
+    }, function(ok, res)
+        local data = (ok and res and res.stdout) and utils.parse_json(res.stdout) or nil
+        local candidates = {}
+        if data and data.results then
+            for _, item in ipairs(data.results) do
+                local mtype = item.media_type or 'movie'
+                if mtype == 'movie' or mtype == 'tv' then
+                    local title = item.title or item.name or item.original_title or item.original_name or ''
+                    if title ~= '' and #candidates < 15 then
+                        local year_raw = item.release_date or item.first_air_date or ''
                         local year = year_raw:match('^(%d%d%d%d)') or ''
                         local rating = item.vote_average and string.format('%.1f', item.vote_average) or ''
                         table.insert(candidates, {
                             id = item.id,
-                            title = item.name or item.original_name or '',
-                            media_type = 'tv',
+                            title = title,
+                            media_type = mtype,
                             year = year,
                             rating = rating,
                             overview = item.overview or '',
@@ -1766,26 +1799,8 @@ function M.fetch_candidates(query, callback)
                     end
                 end
             end
-            if mv_data and mv_data.results then
-                for _, item in ipairs(mv_data.results) do
-                    if #candidates < 15 then
-                        local year_raw = item.release_date or ''
-                        local year = year_raw:match('^(%d%d%d%d)') or ''
-                        local rating = item.vote_average and string.format('%.1f', item.vote_average) or ''
-                        table.insert(candidates, {
-                            id = item.id,
-                            title = item.title or item.original_title or '',
-                            media_type = 'movie',
-                            year = year,
-                            rating = rating,
-                            overview = item.overview or '',
-                        })
-                    end
-                end
-            end
-
-            if callback then callback(candidates) end
-        end)
+        end
+        if callback then callback(candidates) end
     end)
 end
 

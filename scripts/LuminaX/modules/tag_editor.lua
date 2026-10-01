@@ -10,11 +10,21 @@ local input_text         = ''
 local input_cursor       = 1
 local input_prompt       = 'EDIT MOVIE TITLE'
 local input_callback     = nil
+local input_on_cancel   = nil
 local input_key_bindings = {}
 local input_cursor_blink = true
 local input_blink_timer  = nil
 
 local ctx_ref = {}
+local auto_reload_enabled = true
+
+function M.get_auto_reload()
+    return auto_reload_enabled
+end
+
+function M.set_auto_reload(val)
+    auto_reload_enabled = (val == true)
+end
 
 function M.init(ctx)
     ctx_ref = ctx
@@ -104,8 +114,12 @@ function M.apply_mkv_title(new_title, on_done)
         if ok and res and res.status == 0 then
             pcall(mp.set_property, 'file-local-options/media-title', new_title)
             pcall(mp.set_property, 'force-media-title', new_title)
-            mp.osd_message('✓ Title saved: ' .. new_title, 3)
-            if on_done then on_done() end
+            if auto_reload_enabled then
+                M.reload_current_file(on_done)
+            else
+                mp.osd_message('✓ Title saved: ' .. new_title, 3)
+                if on_done then on_done() end
+            end
         else
             local err = (res and res.stderr and res.stderr ~= '') and res.stderr or 'Failed to update title'
             mp.osd_message('Error: ' .. err:sub(1, 60), 4)
@@ -247,7 +261,7 @@ function M.clean_all_mkv_watermarks(on_done)
     for _, t in ipairs(tracks) do
         local t_type = t.type
         local t_title = t.title or ''
-        local is_junk = utils.is_junk_title(t_title) or t_title:lower():find('as%-encodes') or t_title:lower():find('tamil') or t_title:lower():find('telugu')
+        local is_junk = utils.is_junk_title(t_title) or t_title:lower():find('as%-encodes') or t_title:lower():find('1tamilmv') or t_title:lower():find('tamilblasters') or t_title:lower():find('tamilrockers')
         if t_type == 'video' then
             v_idx = v_idx + 1
             if t_title ~= '' and (is_junk or utils.is_junk_title(t_title)) then
@@ -290,8 +304,13 @@ function M.clean_all_mkv_watermarks(on_done)
     }, function(ok, res)
         if ok and res and res.status == 0 then
             pcall(mp.set_property, 'file-local-options/media-title', clean_title)
-            mp.osd_message('✓ Cleaned all tags: ' .. clean_title, 3)
-            if on_done then on_done() end
+            pcall(mp.set_property, 'force-media-title', clean_title)
+            if auto_reload_enabled then
+                M.reload_current_file(on_done)
+            else
+                mp.osd_message('✓ Cleaned all tags: ' .. clean_title .. ' (Saved to disk)', 3)
+                if on_done then on_done() end
+            end
         else
             local err = (res and res.stderr and res.stderr ~= '') and res.stderr or 'Clean failed'
             mp.osd_message('Error: ' .. err:sub(1, 60), 4)
@@ -299,9 +318,30 @@ function M.clean_all_mkv_watermarks(on_done)
     end)
 end
 
+-- Seamlessly reload current file at exact position to refresh demuxer track-list
+function M.reload_current_file(on_done)
+    local path = mp.get_property('path')
+    if not path or path == '' or is_remote_path(path) then
+        if on_done then on_done() end
+        return
+    end
+    local pos = mp.get_property_number('time-pos', 0)
+    local pause = mp.get_property_bool('pause', false)
+    local aid = mp.get_property('aid')
+    local sid = mp.get_property('sid')
+    mp.commandv('loadfile', path, 'replace', 'start=' .. tostring(pos))
+    pcall(mp.set_property_bool, 'pause', pause)
+    if aid and aid ~= 'no' then pcall(mp.set_property, 'aid', aid) end
+    if sid and sid ~= 'no' then pcall(mp.set_property, 'sid', sid) end
+    mp.osd_message('✓ Headers Cleaned & Reloaded', 1.5)
+    if on_done then on_done() end
+end
+
 -- Close text input modal
 function M.input_box_close()
     input_active = false
+    input_callback = nil
+    input_on_cancel = nil
     if input_blink_timer then
         input_blink_timer:kill()
         input_blink_timer = nil
@@ -315,7 +355,7 @@ function M.input_box_close()
 end
 
 -- Open text input modal
-function M.input_box_open(prompt, initial_text, callback)
+function M.input_box_open(prompt, initial_text, callback, on_cancel)
     if ctx_ref.on_open then ctx_ref.on_open() end
 
     input_active = true
@@ -323,6 +363,7 @@ function M.input_box_open(prompt, initial_text, callback)
     input_text = initial_text or ''
     input_cursor = #input_text + 1
     input_callback = callback
+    input_on_cancel = on_cancel
     input_cursor_blink = true
 
     if input_blink_timer then input_blink_timer:kill() end
@@ -437,6 +478,13 @@ function M.input_box_open(prompt, initial_text, callback)
         end)
     end)
 
+    -- Cancel
+    local function do_cancel()
+        local oc = input_on_cancel
+        M.input_box_close()
+        if oc then oc() end
+    end
+
     -- Click outside modal to close
     in_bind('mbtn_left', 'in_mbtn_click', function()
         local mx, my = ctx_ref.get_virt_mouse_pos()
@@ -448,7 +496,7 @@ function M.input_box_open(prompt, initial_text, callback)
         local x0 = math.floor(cx - box_w / 2)
         local y0 = math.floor(cy - box_h / 2)
         if mx < x0 or mx > x0 + box_w or my < y0 or my > y0 + box_h then
-            M.input_box_close()
+            do_cancel()
         end
     end)
 
@@ -462,10 +510,8 @@ function M.input_box_open(prompt, initial_text, callback)
     in_bind('ENTER', 'in_enter', do_confirm)
     in_bind('KP_ENTER', 'in_kp_enter', do_confirm)
 
-    -- Cancel
-    in_bind('ESC', 'in_esc', function()
-        M.input_box_close()
-    end)
+    -- Cancel on ESC
+    in_bind('ESC', 'in_esc', do_cancel)
 
     if ctx_ref.request_tick then ctx_ref.request_tick() end
 end
@@ -540,6 +586,25 @@ function M.render(ass)
     ass:an(5)
     ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b400\\q2}', font))
     ass:append('[Enter] Save   \xc2\xb7   [Esc] Cancel   \xc2\xb7   [\xe2\x86\x90 / \xe2\x86\x92] Move   \xc2\xb7   [Backspace] Delete')
+end
+
+if mp.register_script_message then
+    mp.register_script_message('input-confirm', function(val)
+        if input_active then
+            local cb = input_callback
+            local res = (val and val ~= '') and val or input_text
+            M.input_box_close()
+            if cb then cb(res) end
+        end
+    end)
+
+    mp.register_script_message('input-cancel', function()
+        if input_active then
+            local oc = input_on_cancel
+            M.input_box_close()
+            if oc then oc() end
+        end
+    end)
 end
 
 return M

@@ -295,6 +295,81 @@ assert_true("MKV args contains audio name set", (function()
     return false
 end)())
 
+print("\n=== 7. Testing Tag Inspector Modal State & Auto-Reload ===")
+
+-- Mock mp for tag_editor module
+_G.mp = _G.mp or {
+    observe_property = function() end,
+    register_event = function() end,
+    command_native = function() return {status = 0} end,
+    command_native_async = function(_, cb) cb(true, {status = 0}) end,
+    set_property = function() end,
+    get_property = function(p, def) return def or '' end,
+    get_property_number = function(p, def) return def or 0 end,
+    get_property_bool = function(p, def) return def or false end,
+    osd_message = function() end,
+    add_periodic_timer = function(sec, cb) return { kill = function() end } end,
+    add_forced_key_binding = function() end,
+    remove_key_binding = function() end,
+}
+_G.mp.add_periodic_timer = _G.mp.add_periodic_timer or function(sec, cb) return { kill = function() end } end
+_G.mp.add_forced_key_binding = _G.mp.add_forced_key_binding or function() end
+_G.mp.remove_key_binding = _G.mp.remove_key_binding or function() end
+
+local tag_editor = require('modules.tag_editor')
+assert_eq("Tag editor auto_reload defaults to true", tag_editor.get_auto_reload(), true)
+tag_editor.set_auto_reload(false)
+assert_eq("Tag editor auto_reload set to false", tag_editor.get_auto_reload(), false)
+tag_editor.set_auto_reload(true)
+assert_eq("Tag editor auto_reload restored to true", tag_editor.get_auto_reload(), true)
+
+-- Test input box on_cancel lifecycle
+local cancel_called = false
+local confirm_called = false
+tag_editor.init({
+    request_tick = function() end,
+    on_open = function() end,
+    on_close = function() end
+})
+tag_editor.input_box_open("TEST PROMPT", "Initial", function(v)
+    confirm_called = true
+end, function()
+    cancel_called = true
+end)
+assert_true("Input box is active after open", tag_editor.is_active())
+tag_editor.input_box_close()
+assert_eq("Input box is inactive after close", tag_editor.is_active(), false)
+
+print("\n=== 8. Testing Menu Tags & TMDB Matches Items Structure ===")
+package.preload['mp.utils'] = function()
+    return {
+        readdir = function() return {'test.mkv'} end,
+        split_path = function(p) return '', p end
+    }
+end
+local menu = require('modules.menu')
+local state = {
+    menu_active = 'tags',
+    menu_selected = 1,
+    tag_inspector_expanded = false,
+    tag_inspector_confirm = nil
+}
+menu.init({
+    state = state,
+    utils = utils,
+    tag_editor = tag_editor,
+    request_tick = function() end
+})
+local tag_items = menu.menu_get_items()
+assert_true("Tag Inspector returns items", #tag_items >= 7)
+assert_eq("Card 1 is Clean Watermarks", tag_items[1].action, "clean_all")
+assert_eq("Card 2 is Match Nearest Title (TMDB)", tag_items[2].label, "Match Nearest Title (TMDB)")
+assert_eq("Card 2 action is search_tmdb_picker", tag_items[2].action, "search_tmdb_picker")
+assert_eq("Card 3 is Use Clean Filename", tag_items[3].action, "set_filename")
+assert_eq("Item 4 is Manual Title Input", tag_items[4].action, "edit_manual_inline")
+assert_eq("Item 5 is Save & Apply", tag_items[5].action, "save_manual_inline")
+assert_eq("Item 6 is Advanced Tools Toggle", tag_items[6].action, "toggle_advanced")
+
 print(string.format("\n========================================================"))
 print(string.format("Tag Editor Flows Suite: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))
 print(string.format("========================================================"))

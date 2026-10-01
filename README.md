@@ -1,146 +1,108 @@
 # 🌟 LuminaX for mpv
 
-**LuminaX** transforms **mpv** into a modern media player. It features translucent floating glass controls, interactive menus, and an Infuse/Apple TV-grade pause screensaver with real-time movie logos, metadata cards, and finish times.
+A modern, Apple visionOS-inspired glass interface and Infuse-style cinema pause screensaver for **mpv**.
 
-Unlike older mpv scripts, **LuminaX requires ZERO external language dependencies—no Python, no Pillow, and no pip installs are needed.** It runs with 100% native hardware-accelerated FFmpeg.
-
----
-
-## 📸 Key Features
-
-* **Frosted VisionOS Glass Interface:** Translucent blurred controls with specular highlights, hover-expanding volume slider, and fluid micro-animations.
-* **Infuse / Apple TV Cinema Screensaver:** Triggers when paused, displaying high-resolution movie/series logos, star ratings, genres, directors, plot summaries, and wall-clock finish times (`Ends 10:45 PM`).
-* **Zero-Dependency Native FFmpeg Engine:** Automatic 3-tier Lanczos logo scaling (`380px`, `520px`, `680px`) and BGRA hardware overlay generation running directly inside mpv in ~0.02s.
-* **Auto-Inversion for Dark Logos:** Automatically samples pixel luminance. Pure black or dark logos (e.g. *Secret Level*) are dynamically inverted into crisp, luminous white text so they are never lost on dark backgrounds.
-* **Interactive Glass Menus:** Built-in floating menus for Playlists, Chapters, Audio Tracks, and Subtitles with smooth keyboard and mouse navigation.
-* **Real-Time Tag Cleaner & Editor:** Built-in modal input box with full multi-byte UTF-8 support (Tamil, Hindi, Japanese, Accents, Emojis). Strips messy torrent group watermarks (`[1TamilMV]`, `YTS.MX`, `WEB-DL`) with one click and purges stale caches.
-* **Responsive Window Scaling:** Dynamically adapts from compact 720p tiled windows up to 4K/8K fullscreen displays without layout clipping.
-* **Stream & Offline Guards:** Plays YouTube, Twitch, HLS streams, and offline local files with specialized ambient cards and zero network hang.
+Zero external language dependencies—no Python, no pip packages. Powered by native Lua and hardware FFmpeg.
 
 ---
 
-## 🚀 Step-by-Step Installation Guide
+## ✨ Features
 
-### Option A: Linux & macOS Installation
+* **Floating Glass Controls:** Translucent blurred controls with an upward-fading dark gradient scrim and hover-expanding volume slider.
+* **Cinema Pause Screensaver:** Pausing video displays official movie/TV logos, plot summaries, genres, ratings, and wall-clock finish times (`Ends 10:45 PM`).
+* **Video Adjustments Studio (`V`):** Quick-access drawer for contrast, brightness, gamma, saturation, hue, zoom, debanding, and aspect ratio with one-click reset.
+* **Audio Enhancements & Dialogue Clarity (`a`):** Quick track switcher with one-click **Night Mode** (dynamic voice lifting and SFX dampening) and audio sync stepper.
+* **Subtitle Studio (`Alt+s`):** Left-docked styling drawer with real-time live preview pill, color/font steppers, and subtitle sync delay (`z` / `Z`).
+* **Smart Search:** Playlists (`p`) and Chapters (`c`) automatically show an in-menu search bar when lists exceed 5 items.
+* **Tag Editor & Cleaner (`T`):** One-click cleanup to strip torrent watermarks (`[YTS]`, `[1TamilMV]`, etc.) and re-query TMDB with clean titles.
 
-#### 1-Command Automated Install:
-Open your terminal in the extracted release folder (or cloned repository) and run:
-* **From Release Package (`.tar.gz`):**
-  ```bash
-  ./install.sh
-  ```
-* **From Git Clone:**
-  ```bash
-  ./tools/install.sh
-  ```
-The installer automatically:
-1. Detects `~/.config/mpv` or `$XDG_CONFIG_HOME/mpv` (or `~/Library/Application Support/mpv` on macOS).
-2. Copies `scripts/LuminaX/` and UI fonts (`Inter`, `uosc_icons`).
-3. Sets up `script-opts/osc.conf` (preserving your existing API key if present).
-4. Configures `mpv.conf` with `osc=no` and `osd-bar=no` to prevent dual-controller collisions.
-5. Configures `input.conf` with LuminaX menu shortcuts (`Tab`, `p`, `c`, `a`, `s`).
-6. Updates your user font cache via `fc-cache`.
+---
 
-#### Manual Linux Install:
-```bash
-# 1. Create target folders
-mkdir -p ~/.config/mpv/scripts/LuminaX
-mkdir -p ~/.config/mpv/fonts
-mkdir -p ~/.config/mpv/script-opts
+## 🚀 Step-by-Step Windows Installation Guide
 
-# 2. Copy scripts & fonts
-cp -r scripts/LuminaX/* ~/.config/mpv/scripts/LuminaX/
-cp fonts/* ~/.config/mpv/fonts/
+Installation takes less than **3 minutes** and requires no developer tools.
 
-# 3. Copy configuration & keybindings
-cp script-opts/osc.conf ~/.config/mpv/script-opts/osc.conf
-cp input.conf ~/.config/mpv/input.conf
+### Step 1: Locate your mpv Configuration Folder
 
-# 4. Ensure mpv.conf disables default controls
-echo -e "\nosc=no\nosd-bar=no\nosd-font=\"Inter\"" >> ~/.config/mpv/mpv.conf
+Depending on how you installed mpv on Windows, your config directory is located at:
+
+* **Standard / Installer / Scoop:**
+  Press `Win + R`, type `%APPDATA%\mpv` and press `Enter`.
+  *(Full path: `C:\Users\<YourUsername>\AppData\Roaming\mpv`)*
+* **Portable mpv (`portable_config`):**
+  Inside your mpv folder where `mpv.exe` lives, open the `portable_config` folder.
+
+If the folder does not exist yet, create it.
+
+---
+
+### Step 2: Install LuminaX Files
+
+Inside your mpv config folder (`%APPDATA%\mpv` or `portable_config`), set up the following folders:
+
+```
+mpv/
+├── mpv.conf                     <-- Core player settings
+├── input.conf                   <-- Keybindings
+├── fonts/                       <-- UI & Icon Fonts
+│   ├── Inter-Bold.ttf
+│   ├── Inter-Medium.ttf
+│   ├── Inter-Regular.ttf
+│   ├── Inter-SemiBold.ttf
+│   └── uosc_icons.otf           <-- Material Icons Round font
+├── script-opts/
+│   └── osc.conf                 <-- LuminaX configuration & TMDB key
+└── scripts/
+    └── LuminaX/                 <-- The entire LuminaX script folder
+        ├── main.lua
+        └── modules/
+            ├── huds.lua
+            ├── menu.lua
+            ├── osc.lua
+            ├── screensaver.lua
+            ├── tag_editor.lua
+            └── utils.lua
+```
+
+1. Copy the **`LuminaX`** directory into `mpv/scripts/`.
+2. Copy the fonts from **`fonts/`** into `mpv/fonts/`. *(Optional: You can also right-click `uosc_icons.otf` and `Inter-*.ttf` and click **"Install for all users"**).*
+3. Copy **`osc.conf`** into `mpv/script-opts/`.
+
+---
+
+### Step 3: Configure `mpv.conf` (Critical!)
+
+Open your `mpv.conf` file in Notepad (create it if it doesn't exist) and add this line:
+
+```ini
+# Disable stock mpv on-screen controller so LuminaX takes over
+osc=no
+osd-bar=no
+```
+
+#### Recommended `mpv.conf` settings for the best experience:
+```ini
+osc=no
+osd-bar=no
+osd-font="Inter"
+osd-font-size=18
+cursor-autohide=1000
+keep-open=yes
+save-position-on-quit=yes
 ```
 
 ---
 
-### Option B: Windows Installation
+### Step 4: Add Your Free TMDB API Key (For Logos & Plot Summaries)
 
-#### 1-Click Automated Install (Recommended):
-* **From Release Package (`.zip`):**
-  * **Batch:** Double-click `install.bat`
-  * **PowerShell:** Right-click `install.ps1` and select **Run with PowerShell**
-* **From Git Clone:**
-  * **Batch:** Double-click `tools\install.bat`
-  * **PowerShell:** Right-click `tools\install.ps1` and select **Run with PowerShell**
+To allow the pause screensaver to fetch movie logos, backdrops, and cast info from The Movie Database (TMDB):
 
-The automated Windows installer automatically:
-1. **Auto-Detects mpv**: Finds portable mpv installations (in `Downloads`, `C:\mpv`, Scoop, etc.) or standard `%APPDATA%\mpv` and configures `portable_config`.
-2. **Auto-Links FFmpeg**: Locates `ffmpeg.exe` (in `%PATH%`, `Downloads`, etc.) and links/copies it directly next to `mpv.exe` so mpv can run it natively with zero PATH configuration.
-3. **Optional User PATH Integration**: Prompts or allows adding your mpv folder to Windows User `%PATH%` (enabling `mpv` and `ffmpeg` commands from any terminal).
-4. **Registers Fonts**: Installs and registers UI fonts (`Inter`, `uosc_icons`) in the Windows User Font Registry to eliminate missing glyph boxes (`[]`).
-5. **Configures Settings**: Sets `osc=no` and `osd-bar=no` in `mpv.conf`, installs `input.conf` keybindings, and preserves any existing TMDB API keys.
-
-#### Adding mpv and FFmpeg to Windows PATH Manually:
-If you prefer to configure your Windows PATH manually without the installer:
-* **Option 1: One-Line PowerShell (No Admin Required):**
-  ```powershell
-  # Replace C:\mpv with the folder containing your mpv.exe and ffmpeg.exe
-  [Environment]::SetEnvironmentVariable("PATH", "$([Environment]::GetEnvironmentVariable('PATH', 'User'));C:\mpv", "User")
-  ```
-* **Option 2: Windows GUI:**
-  1. Press `Win + R`, type `sysdm.cpl` and press **Enter**.
-  2. Go to the **Advanced** tab and click **Environment Variables**.
-  3. Under **User variables**, select **Path** and click **Edit**.
-  4. Click **New**, paste the folder path containing `mpv.exe` and `ffmpeg.exe` (e.g. `C:\mpv`), and click **OK**.
-
-#### Manual Windows Install (Takes less than 3 minutes):
-1. **Locate your mpv config folder:**
-   * **Standard / Scoop / Chocolatey:** Press `Win + R`, type `%APPDATA%\mpv` and press `Enter` (`C:\Users\<YourUsername>\AppData\Roaming\mpv`).
-   * **Portable mpv (`portable_config`):** Inside your mpv directory where `mpv.exe` lives, open or create the `portable_config` folder.
-2. **Copy the files:**
-   * Copy `scripts\LuminaX` into `mpv\scripts\`
-   * Copy all files from `fonts\` into `mpv\fonts\`
-   * Copy `script-opts\osc.def.conf` (or `osc.conf`) into `mpv\script-opts\osc.conf`
-   * Copy `input.def.conf` (or `input.conf`) into `mpv\input.conf`
-3. **Configure `mpv.conf`:**
-   Open `mpv.conf` in Notepad (create it if missing) and ensure these lines are present:
-   ```ini
-   osc=no
-   osd-bar=no
-   osd-font="Inter"
-   ```
-4. **Ensure `ffmpeg.exe` is available:**
-   Make sure `ffmpeg.exe` is placed directly in the same folder as `mpv.exe` or is in your Windows `PATH`.
-
----
-
-## 💾 Cache & Performance Optimization
-
-LuminaX maintains a local cache to deliver instantaneous Infuse/Apple TV-grade screensavers without re-downloading or re-processing art:
-
-* **Cache Location:**
-  * **Portable mpv:** `<mpv_folder>\portable_config\cache\luminax\`
-  * **Standard Install:** `%LOCALAPPDATA%\mpv\luminax\` or `%TEMP%\mpv_luminax\`
-  * **Linux / macOS:** `~/.cache/mpv/luminax/` or `$XDG_CACHE_HOME/mpv/luminax/`
-* **What is Cached?**
-  * TMDB API movie and show metadata responses (JSON).
-  * High-resolution official movie logos (transparent PNGs).
-  * Pre-rendered hardware-accelerated BGRA Lanczos overlays for instantaneous `< 0.002s` display.
-* **Cache Management:**
-  * Automatic fallback: If offline or playing unknown streams, offline ambient cards are displayed with zero network delay.
-  * Tag Editor purge: Renaming a title or clicking **"Clean All Junk Watermarks"** (`T` shortcut) immediately clears stale cache entries for that file and queries TMDB with the cleaned name.
-
----
-
-## 🔑 Adding Your Free TMDB API Key
-
-To enable high-resolution movie logos, backdrop art, star ratings, and plot summaries on the pause screensaver:
-
-1. Register for a free account at [themoviedb.org](https://www.themoviedb.org/signup).
+1. Go to [themoviedb.org](https://www.themoviedb.org/signup) and create a free account.
 2. Go to **Settings → API** and generate a free Developer API key.
-3. Open `script-opts/osc.conf` in any text editor.
-4. Set line 42 with your 32-character key:
+3. Open `mpv/script-opts/osc.conf` in Notepad.
+4. Paste your key on line 42:
    ```ini
-   tmdb_api_key=your_32_character_api_key_here
+   tmdb_api_key=your_api_key_here
    screensaver_enabled=yes
    screensaver_delay=3
    screensaver_align=center
@@ -148,170 +110,83 @@ To enable high-resolution movie logos, backdrop art, star ratings, and plot summ
    ```
 5. Save the file.
 
-> [!TIP]
-> If no TMDB key is provided, or when playing network streams / offline files, LuminaX automatically falls back to the **Ambient Info Card** showing file duration, finish clock time, resolution quality, and audio specs with zero crashes.
+---
+
+## 🎮 Keybindings
+
+| Key | Action |
+| :--- | :--- |
+| **`Tab`** | Toggle OSC visibility mode (Show / Auto / Hide) |
+| **`p`** | Open **Playlist Menu** (Glass popup list with mouse & arrow keys) |
+| **`c`** | Open **Chapters Menu** |
+| **`a`** | Open **Audio Tracks Menu** |
+| **`s`** | Open **Subtitles Menu** |
+| **`T`** / **`Ctrl + t`** | Open **Tag Editor & Title Cleaner** |
+| **`Space`** | Pause / Play (After 3s pause, screensaver activates) |
+| **`Esc`** | Dismiss Screensaver / Close Menu |
+| **`Mouse Move`** | Wakes player from screensaver and shows controls |
 
 ---
 
-## 🎮 Keybindings & Navigation Cheat Sheet
+## 🛠️ Windows Troubleshooting Guide
 
-| Shortcut | Action | Description |
-| :--- | :--- | :--- |
-| **`Space`** / **`Left Click`** | Play / Pause | Pausing triggers the screensaver countdown (3s default) |
-| **`Tab`** | Toggle OSC Visibility | Cycle visibility between Auto, Always-On, and Hidden |
-| **`p`** | **Playlist Menu** | Floating glass popup list with mouse and keyboard navigation |
-| **`c`** | **Chapters Menu** | Interactive chapter selector |
-| **`a`** | **Audio Tracks Menu** | Audio track switcher (showing language, codecs, channels) |
-| **`s`** | **Subtitles Menu** | Subtitle track selector |
-| **`T`** / **`Ctrl + t`** | **Tag Editor & Cleaner** | Modal input box to clean tracker junk or rename title in-place |
-| **`Esc`** | Dismiss | Closes active menus or dismisses screensaver without exiting fullscreen |
-| **`Mouse Move`** | Wake Player | Smoothly fades out screensaver and reveals visionOS glass controls |
-| **`[` / `]`** | Speed Adjustment | Fluid pitch-corrected playback speed (±10%) |
-| **`Backspace`** | Reset Speed | Reset playback speed to 1.0x |
-| **`n` / `N`** | Anime Intro Skip | Skip forward/backward 85 seconds (Standard OP/ED length) |
-| **`Up` / `Down`** | Volume Control | Adjust volume by 5% |
-| **`m`** | Mute | Toggle audio mute |
-| **`S`** / **`Ctrl + s`** | Screenshot | Capture frame with subtitles (`S`) or clean raw video (`Ctrl+s`) |
-
----
-
-## 🛠️ Troubleshooting & Easy Fixes Guide
+If something doesn't look or work as expected, check these quick fixes:
 
 ### 1. Two controllers appear on screen (overlapping bars)
-* **Symptom:** The default stock mpv bottom bar overlaps with the visionOS glass controller.
-* **Cause:** Default mpv OSC was not disabled in `mpv.conf`.
-* **Fix:** Open `mpv.conf` and verify the following lines are present:
-  ```ini
-  osc=no
-  osd-bar=no
-  ```
-  Save and restart mpv.
+* **Cause:** The default stock mpv OSC was not disabled.
+* **Fix:** Open `mpv.conf` and ensure `osc=no` is present. Restart mpv.
 
----
-
-### 2. Buttons show empty boxes `[]` or broken icons
-* **Symptom:** Media buttons display missing font glyphs or rectangular boxes.
-* **Cause:** mpv cannot locate the custom Material Icons Round font.
+### 2. Buttons show blank boxes `[]` or broken icons
+* **Cause:** mpv cannot find the Material Icons font.
 * **Fix:**
-  1. Ensure `uosc_icons.otf` is present inside your `mpv/fonts/` folder.
-  2. On Windows, right-click `fonts\uosc_icons.otf` and select **Install for all users**.
-  3. On Linux, run `fc-cache -f ~/.local/share/fonts` after placing the font files.
+  1. Make sure `uosc_icons.otf` (or `MaterialIconsRound-Regular.otf`) is placed inside `mpv/fonts/`.
+  2. Alternatively, open `uosc_icons.otf` in Windows Explorer and click **Install**.
 
----
-
-### 3. Movie title is messy (e.g. `[1TamilMV.vip] Movie (2026) 1080p WEB-DL`)
-* **Symptom:** File title has torrent site watermarks, codec tags, or website domains.
-* **Fix:**
-  1. Press **`T`** on your keyboard while playing the video.
-  2. Select **"Clean All Junk Watermarks"** to instantly strip release group tags from title and audio/subtitle tracks.
-  3. Or select **"Edit Movie Title"** to type the exact title.
-  4. LuminaX will purge old cache entries and immediately re-query TMDB with the clean name.
-
----
-
-### 4. Screensaver shows styled text instead of official movie logo
-* **Cause A (Expected):** The movie or TV show does not have a transparent PNG logo uploaded on TMDB in English. In this case, LuminaX automatically renders high-resolution typography with subtitle shadow as an elegant fallback.
-* **Cause B:** `ffmpeg` is not found on your system.
-* **Fix:** Open a terminal / command prompt and type:
-  ```bash
+### 3. Screensaver shows movie details, but logo is missing (styled text fallback)
+* **Cause A:** The movie or TV show does not have an official logo uploaded to TMDB in English. In this case, LuminaX automatically renders high-resolution typography with subtitle shadow.
+* **Cause B:** `ffmpeg.exe` is not found in your system PATH or mpv directory.
+* **Fix:** Open Command Prompt (`cmd.exe`) and type:
+  ```cmd
   ffmpeg -version
   ```
-  If it outputs an error, install FFmpeg or place `ffmpeg.exe` in the same directory as `mpv.exe`.
+  If it says *"'ffmpeg' is not recognized"*, download FFmpeg or place `ffmpeg.exe` in the same directory where `mpv.exe` is located.
+
+### 4. Screensaver does not show any TMDB metadata ("Offline Ambient Card" appears)
+* **Cause A:** Invalid or missing TMDB API key.
+  * **Fix:** Open `script-opts/osc.conf` and verify `tmdb_api_key` has your valid 32-character key without extra spaces.
+* **Cause B:** Windows Firewall is blocking `curl.exe`.
+  * **Fix:** In Command Prompt, test:
+    ```cmd
+    curl -I https://api.themoviedb.org
+    ```
+    If connection fails, check your antivirus or network proxy.
+
+### 5. Black or dark logos are unreadable ("Black Label" issue)
+* **Cause:** Some logos on TMDB (like *Secret Level*) are uploaded as pure black text.
+* **Fix:** LuminaX includes automated luminance detection. It evaluates non-transparent pixels and automatically inverts black text into luminous white (`output_lum ~ 224`). Make sure you are using the latest version of LuminaX.
+
+### 6. Movie title is messy (e.g. `[1TamilMV] Movie (2026) 1080p WEB-DL`)
+* **Fix:** Press **`T`** on your keyboard while the video is playing:
+  * Select **"Clean All Junk Watermarks"** to strip tracker tags.
+  * Select **"Edit Movie Title"** to type the exact title.
+  LuminaX will instantly purge old cache entries and re-query TMDB with the cleaned title.
+
+### 7. Tag editing gives error: `mkvpropedit not found`
+* **Note:** `mkvpropedit` is 100% optional. If you do not have MKVToolNix installed, LuminaX will automatically apply your title changes in-memory using mpv's native `force-media-title`.
+* **Fix (For permanent MKV file writing):** Download [MKVToolNix Portable](https://mkvtoolnix.download/) and place `mkvpropedit.exe` in your mpv folder or in your Windows PATH.
 
 ---
 
-### 5. Screensaver shows "Offline Ambient Card" instead of plot summary
-* **Cause A:** TMDB API key is missing or invalid in `script-opts/osc.conf`.
-  * **Fix:** Verify `tmdb_api_key` has your valid 32-character key without extra quotes or spaces.
-* **Cause B:** You are playing an online network stream (YouTube, Twitch, live HLS).
-  * **Note:** LuminaX includes a built-in **Stream Guard** that intentionally bypasses TMDB searches on streams and displays stream domain, resolution, and live status.
-* **Cause C:** Network firewall or proxy is blocking `curl`.
-  * **Fix:** Test connection in terminal: `curl -I https://api.themoviedb.org`.
+## ⚙️ Configuration Reference (`script-opts/osc.conf`)
 
----
-
-### 6. Black or dark logos are unreadable ("Black Label" issue)
-* **Symptom:** Some TMDB logos (like *Secret Level*) are uploaded as pure black text.
-* **Fix:** LuminaX includes automated luminance detection. It samples non-transparent pixels and automatically inverts pure black text into luminous white (`output_lum ~ 224`). Make sure `logo_engine=auto` or `logo_engine=ffmpeg` is set in `osc.conf`.
-
----
-
-### 7. Tag editing displays: `mkvpropedit not found`
-* **Note:** `mkvpropedit` is completely optional. If MKVToolNix is not installed, LuminaX will automatically apply your title changes in-memory using mpv's native `force-media-title` for the current session.
-* **Fix (For permanent MKV file modification):**
-  * **Windows:** Download [MKVToolNix Portable](https://mkvtoolnix.download/) and place `mkvpropedit.exe` in your mpv folder or in your Windows PATH.
-  * **Linux:** Install via package manager: `sudo apt install mkvtoolnix` or `sudo pacman -S mkvtoolnix-cli`.
-
----
-
-### 8. Text input with Tamil, Hindi, Japanese, accents, or emojis
-* **Behavior:** The LuminaX Tag Editor modal has native multi-byte UTF-8 support.
-* **Usage:**
-  * Type in any language (Tamil `நாயகன்`, Hindi `दृश्यम`, Japanese `君の名は。`, Accents `Amélie`, Emojis `🎬🍿`).
-  * Use **Arrow keys**, **Home**, **End**, **Backspace**, and **Delete**—the cursor respects multi-byte UTF-8 boundaries and will never slice characters in half.
-  * Press **Ctrl+v** to paste clipboard text (newlines and invalid control characters are automatically sanitized).
-
----
-
-### 9. Volume slider visibility mode
-* **Behavior:** By default, the volume slider smoothly expands when hovering over the speaker icon.
-* **Customization:** In `script-opts/osc.conf`:
-  * `volume_slider_mode=hover`  - Minimalist (default)
-  * `volume_slider_mode=always` - Permanently expanded slider
-  * `volume_slider_mode=never`  - Speaker mute icon only
-
----
-
-## 🔍 System Verification & Diagnostics
-
-LuminaX includes a cross-platform diagnostic utility to verify your installation at any time:
-
-```bash
-# From Release Package:
-python3 verify_installation.py
-
-# From Git Clone:
-python3 tools/verify_installation.py
-```
-This utility automatically checks:
-* System platform (Linux, Windows, macOS)
-* mpv, FFmpeg, curl, and mkvpropedit binary paths and versions
-* Complete LuminaX module directory structure
-* Required UI fonts presence
-* `mpv.conf` conflict detection (`osc=no`, `osd-bar=no`)
-* TMDB cloud network reachability
-
----
-
-## 🧪 Automated Test Suite
-
-To run the complete automated test suite (including UTF-8 navigation, state machine transitions, Spacebar pause spamming, 3-tier window geometry, and headless mpv IPC runtime tests):
-
-```bash
-python3 tests/run_all_tests.py
-```
-* **7 Test Suites**
-* **251 Automated Assertions**
-
----
-
-## 📦 Building Distribution Release Packages
-
-To package LuminaX for distribution across Windows and Linux:
-
-```bash
-python3 tools/package_dist.py
-```
-Outputs release archives into `dist/`:
-* `luminaX-linux.tar.gz` (with automated installer `install.sh`)
-* `luminaX-windows.zip` (with automated installers `install.bat` and `install.ps1`)
-* `checksums.txt` (SHA256 verification hashes)
-
----
-
-## 📄 Reference Configuration Files
-
-* [script-opts/osc.def.conf]: Exhaustive reference of all LuminaX flags and defaults.
-* [mpv.def.conf]: High-performance GPU rendering, debanding, subtitle, and audio options.
-* [input.def.conf]: Keybindings reference for window control, seeking, speed, and menus.
-* [script-opts/stats.def.conf]: Styling reference for visionOS-themed mpv stats overlay (`i` / `Shift+i`).
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `tmdb_api_key` | `""` | Your TMDB API v3 key |
+| `screensaver_enabled` | `yes` | Enables the Infuse/Apple TV style pause screensaver |
+| `screensaver_delay` | `3` | Seconds of pause before the screensaver fades in |
+| `screensaver_align` | `center` | Layout alignment: `center` (cinema centered), `split`, `left` |
+| `logo_engine` | `auto` | Logo processing engine: `auto` (native FFmpeg with python fallback), `ffmpeg` (pure native FFmpeg) |
+| `volume_slider_mode` | `hover` | Volume slider behavior: `hover`, `always`, or `never` |
+| `jumpamount` | `10` | Seconds to skip on jump buttons (`5`, `10`, `30`) |
+| `min_scale` | `0.70` | Minimum adaptive scaling factor for tiled windows |
+| `max_scale` | `1.05` | Maximum adaptive scaling factor for fullscreen |

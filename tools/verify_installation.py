@@ -103,6 +103,7 @@ def main():
         os.path.join("scripts", "LuminaX", "modules", "menu.lua"),
         os.path.join("scripts", "LuminaX", "modules", "screensaver.lua"),
         os.path.join("scripts", "LuminaX", "modules", "tag_editor.lua"),
+        os.path.join("scripts", "LuminaX", "modules", "subtitle.lua"),
     ]
 
     all_scripts_ok = True

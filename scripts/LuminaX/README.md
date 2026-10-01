@@ -1,21 +1,20 @@
 # 🌟 LuminaX for mpv
-### Next-Generation Apple visionOS Glass Interface & Infuse-Style TMDB Cinema Screensaver
 
-**LuminaX** transforms **mpv** into a luxury, Apple visionOS-inspired media player. It features translucent floating glass controls, interactive menus, and an Infuse/Apple TV-grade pause screensaver with real-time movie logos, metadata cards, and wall-clock finish times.
+A modern, Apple visionOS-inspired glass interface and Infuse-style cinema pause screensaver for **mpv**.
 
-Unlike older mpv scripts, **LuminaX requires ZERO external language dependencies—no Python, no Pillow, and no pip installs are needed.** It runs with 100% native hardware-accelerated FFmpeg.
+Zero external language dependencies—no Python, no pip packages. Powered by native Lua and hardware FFmpeg.
 
 ---
 
-## 📸 Features at a Glance
+## ✨ Features
 
-* **Frosted VisionOS Glass Interface:** Translucent blurred controls with specular highlights, hover-expanding volume slider, and smooth animations.
-* **Infuse / Apple TV Cinema Screensaver:** Triggers when paused, displaying high-resolution movie/series logos, star ratings, genres, directors, plot summaries, and wall-clock end times (`Ends 10:45 PM`).
-* **Zero-Dependency Native FFmpeg Engine:** Automatic 3-tier Lanczos logo scaling (`380px`, `520px`, `680px`) and BGRA hardware overlay generation running directly inside mpv in ~0.02 seconds.
-* **Auto-Inversion for Dark Logos:** Automatically samples pixel luminance. Pure black or dark logos (e.g. *Secret Level*) are dynamically inverted into crisp, luminous white text so they are never lost on dark backgrounds.
-* **Interactive Glass Menus:** Built-in floating menus for Playlists, Chapters, Audio Tracks, and Subtitles with smooth keyboard and mouse navigation.
-* **Real-Time Tag Cleaner & Editor:** Built-in modal input box with full multi-byte UTF-8 support (Tamil, Hindi, Japanese, Accents, Emojis). Strips messy torrent group watermarks (`[1TamilMV]`, `YTS.MX`, `WEB-DL`) with one click and purges stale caches.
-* **Responsive Window Scaling:** Dynamically adapts from compact 720p tiled windows up to 4K/8K fullscreen displays without layout clipping.
+* **Floating Glass Controls:** Translucent blurred controls with an upward-fading dark gradient scrim and hover-expanding volume slider.
+* **Cinema Pause Screensaver:** Pausing video displays official movie/TV logos, plot summaries, genres, ratings, and wall-clock finish times (`Ends 10:45 PM`).
+* **Video Adjustments Studio (`V`):** Quick-access drawer for contrast, brightness, gamma, saturation, hue, zoom, debanding, and aspect ratio with one-click reset.
+* **Audio Enhancements & Dialogue Clarity (`a`):** Quick track switcher with one-click **Night Mode** (dynamic voice lifting and SFX dampening) and audio sync stepper.
+* **Subtitle Studio (`Alt+s`):** Left-docked styling drawer with real-time live preview pill, color/font steppers, and subtitle sync delay (`z` / `Z`).
+* **Smart Search:** Playlists (`p`) and Chapters (`c`) automatically show an in-menu search bar when lists exceed 5 items.
+* **Tag Editor & Cleaner (`T`):** One-click cleanup to strip torrent watermarks (`[YTS]`, `[1TamilMV]`, etc.) and re-query TMDB with clean titles.
 
 ---
 
@@ -113,7 +112,7 @@ To allow the pause screensaver to fetch movie logos, backdrops, and cast info fr
 
 ---
 
-## 🎮 Keybindings & Navigation
+## 🎮 Keybindings
 
 | Key | Action |
 | :--- | :--- |

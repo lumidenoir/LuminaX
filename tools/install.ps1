@@ -547,7 +547,10 @@ p                 script-binding LuminaX/menu-playlist
 c                 script-binding LuminaX/menu-chapters
 a                 script-binding LuminaX/menu-audio
 s                 script-binding LuminaX/menu-sub
-t                 script-binding LuminaX/tag-editor
+Alt+s             script-binding LuminaX/menu-sub-config
+V                 script-binding LuminaX/menu-video
+T                 script-binding LuminaX/toggle-tags-menu
+Ctrl+t            script-binding LuminaX/toggle-tags-menu-ctrl
 "@
 
 if (-not (Test-Path $inputConf)) {
@@ -561,7 +564,7 @@ if (-not (Test-Path $inputConf)) {
     $existingInput = Get-Content -Path $inputConf -Raw -ErrorAction SilentlyContinue
     if ($existingInput -notmatch 'LuminaX/menu-playlist' -and $existingInput -notmatch 'menu-playlist') {
         [System.IO.File]::AppendAllText($inputConf, "`n" + $menuBindings, $utf8NoBom)
-        Write-Success "Added LuminaX menu shortcuts (Tab, p, c, a, s, t) to input.conf"
+        Write-Success "Added LuminaX menu shortcuts (Tab, p, c, a, s, Alt+s, V, T) to input.conf"
     } else {
         Write-Success "input.conf already contains LuminaX shortcuts"
     }
@@ -582,6 +585,7 @@ $verifyFiles = @(
     "scripts\LuminaX\modules\menu.lua",
     "scripts\LuminaX\modules\screensaver.lua",
     "scripts\LuminaX\modules\tag_editor.lua",
+    "scripts\LuminaX\modules\subtitle.lua",
     "fonts\Inter-Regular.ttf",
     "fonts\uosc_icons.otf",
     "script-opts\osc.conf",

@@ -21,6 +21,9 @@ local TEST_CASES = {
     {raw = "Gladiator.II.2024.720p.HDCAM.x264.Clean.Audio-BONSAI.mkv", exp_title = "Gladiator II", exp_year = "2024"},
     {raw = "Godzilla.x.Kong.The.New.Empire.2024.1080p.HDRip.XviD.AC3-EVO.avi", exp_title = "Godzilla x Kong The New Empire", exp_year = "2024"},
     {raw = "Interstellar.2014.1080p.BluRay.x264.YIFY.mp4", exp_title = "Interstellar", exp_year = "2014"},
+    {raw = "www.1TamilMV.gripe - Dacoit (2026) Telugu HQ PreDVD - 1080p - x264 - HQ Clean - AAC - 2.5GB.mkv", exp_title = "Dacoit", exp_year = "2026"},
+    {raw = "www.1TamilMV.reisen - The Odyssey (2026) New HQ HDTS - 1080p - x264 - [Tam + Tel + Hin + Eng] - HQ Clean - 3.3GB.mkv", exp_title = "The Odyssey", exp_year = "2026"},
+    {raw = "www.1TamilMV.immo - Project Hail Mary (2026) New HQ PreDVD - 1080p - x264 - [Tam + Tel + Eng] - HQ Clean - AAC - 2.9GB.mkv", exp_title = "Project Hail Mary", exp_year = "2026"},
 }
 
 local passed = 0
@@ -47,6 +50,14 @@ for i, tc in ipairs(TEST_CASES) do
             tc.exp_title, tostring(tc.exp_year), tostring(tc.exp_s), tostring(tc.exp_e)))
     end
 end
+
+-- Junk title verification
+assert(utils.is_junk_title("www.1TamilMV.immo") == true, "domain watermark must be junk")
+assert(utils.is_junk_title("HQ Clean") == true, "standalone HQ Clean must be junk")
+assert(utils.is_junk_title("PreDVD") == true, "standalone PreDVD must be junk")
+assert(utils.is_junk_title("HDTS") == true, "standalone HDTS must be junk")
+assert(utils.is_junk_title("TE [AAC 2.0]") == false, "clean audio tag must not be junk")
+assert(utils.is_junk_title("Tamil [AAC 2.0]") == false, "clean audio tag must not be junk")
 
 print(string.format("\nCorpus Test Summary: %d Passed, %d Failed (%.1f%%)",
     passed, failed, (passed / (passed + failed)) * 100))

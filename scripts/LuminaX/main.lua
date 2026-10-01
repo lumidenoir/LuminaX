@@ -52,20 +52,26 @@ tag_editor.init({
 
 -- 2. Initialize Screensaver
 screensaver.init({
-    user_opts    = user_opts,
-    state        = state,
-    hide_osc     = osc.hide_osc,
-    show_osc     = osc.show_osc,
-    request_tick = osc.request_tick,
-    utils        = utils,
+    user_opts      = user_opts,
+    state          = state,
+    hide_osc       = osc.hide_osc,
+    show_osc       = osc.show_osc,
+    request_tick   = osc.request_tick,
+    utils          = utils,
+    is_menu_active = function()
+        return (menu and menu.is_active and menu.is_active()) or
+               (tag_editor and tag_editor.is_active and tag_editor.is_active())
+    end,
 })
 
 -- 3. Initialize Subtitle Subsystem
 subtitle.init({
     utils        = utils,
     user_opts    = user_opts,
+    state        = state,
     osc_param    = osc_param,
     request_tick = osc.request_tick,
+    screensaver  = screensaver,
 })
 
 -- 4. Initialize Menu
@@ -79,10 +85,12 @@ menu.init({
     request_tick      = osc.request_tick,
     tag_editor        = tag_editor,
     utils             = utils,
+    screensaver       = screensaver,
     get_tmdb_current  = screensaver.get_current,
     inhibit_screensaver = screensaver.inhibit,
     on_open           = function()
         screensaver.inhibit()
+        osc.hide_osc()
     end,
     on_close          = function()
         if mp.get_property_native('pause') and user_opts.screensaver_enabled then
@@ -171,6 +179,22 @@ mp.add_key_binding(nil, 'sub-scale-reset', function()
     if subtitle and subtitle.reset_sub_scale then subtitle.reset_sub_scale() end
 end)
 
+mp.add_key_binding(nil, 'menu-video', function()
+    if menu.is_active() and state.menu_active == 'video' then
+        menu.menu_close()
+    else
+        menu.menu_open('video')
+    end
+end)
+
+mp.add_key_binding('V', 'toggle-video-menu', function()
+    if menu.is_active() and state.menu_active == 'video' then
+        menu.menu_close()
+    else
+        menu.menu_open('video')
+    end
+end)
+
 mp.add_key_binding(nil, 'menu-tags', function()
     if menu.is_active() and state.menu_active == 'tags' then
         menu.menu_close()
@@ -192,5 +216,19 @@ mp.add_key_binding('Ctrl+t', 'toggle-tags-menu-ctrl', function()
         menu.menu_close()
     else
         menu.menu_open('tags')
+    end
+end)
+
+mp.register_script_message('menu-open', function(mtype)
+    if menu.is_active() and state.menu_active == mtype then
+        menu.menu_close()
+    else
+        menu.menu_open(mtype)
+    end
+end)
+
+mp.register_script_message('menu-close', function()
+    if menu.is_active() then
+        menu.menu_close()
     end
 end)

@@ -20,6 +20,7 @@ SUITES = [
     {"name": "Subtitle Subsystem & Rounded Pill", "cmd": ["lua", "tests/test_subtitle_system.lua"]},
     {"name": "Headless MPV Live Runtime E2E", "cmd": ["python3", "tests/test_mpv_headless_e2e.py"]},
     {"name": "Headless Subtitle Runtime E2E", "cmd": ["python3", "tests/test_subtitle_e2e.py"]},
+    {"name": "Fullscreen & Aspect Ratio Multi-Display", "cmd": ["python3", "tests/test_fullscreen_aspect.py"]},
 ]
 
 def main():
