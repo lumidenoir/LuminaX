@@ -87,7 +87,12 @@ _G.mp = {
         }
         return ov
     end,
-    command_native = function() return nil end,
+    command_native = function(cmd)
+        if type(cmd) == 'table' and cmd[1] == 'expand-path' then
+            return '/tmp/luminax_test_sub_opts/lumina_subtitle.json'
+        end
+        return nil
+    end,
 }
 
 -- Mock assdraw

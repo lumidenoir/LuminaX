@@ -200,61 +200,89 @@ if [ -d "$EXTRACTED_ROOT/fonts" ]; then
     echo "  Updated UI & icon fonts"
 fi
 
-# 6. Preserve osc.conf & Merge new settings
-OSC_CONF="$TARGET_DIR/script-opts/osc.conf"
-TEMPLATE_OSC="$EXTRACTED_ROOT/script-opts/osc.conf"
-[ ! -f "$TEMPLATE_OSC" ] && TEMPLATE_OSC="$EXTRACTED_ROOT/script-opts/osc.def.conf"
+# 6. Backup previous config files to .bak and replace with .def.conf templates as normal configs
+echo -e "\n=== Updating Configurations (Backup to .bak & Deploy .def Templates) ==="
 
-if [ -f "$OSC_CONF" ]; then
-    EXISTING_KEY=$(grep -E '^[[:space:]]*tmdb_api_key[[:space:]]*=' "$OSC_CONF" | head -n1 | sed -E 's/^[[:space:]]*tmdb_api_key[[:space:]]*=[[:space:]]*//' | tr -d '\r' | sed -E 's/^["'\'']//; s/["'\'']$//' || true)
-    if [ -n "$EXISTING_KEY" ] && [ "$EXISTING_KEY" != "your_api_key_here" ]; then
-        echo -e "  ${GREEN}✓ Preserved your existing TMDB API key in osc.conf${NC}"
-    fi
+# 6.1 input.conf -> input.conf.bak, replace with input.def.conf
+TARGET_INPUT="$TARGET_DIR/input.conf"
+SRC_INPUT_DEF="$EXTRACTED_ROOT/input.def.conf"
+[ ! -f "$SRC_INPUT_DEF" ] && SRC_INPUT_DEF="$EXTRACTED_ROOT/input.conf"
 
-    # Merge newly added keys without modifying existing user values
-    if [ -f "$TEMPLATE_OSC" ]; then
-        NEW_KEYS=0
-        while IFS= read -r line || [ -n "$line" ]; do
-            clean_line=$(echo "$line" | tr -d '\r')
-            [[ "$clean_line" =~ ^[[:space:]]*# ]] && continue
-            [[ -z "$clean_line" ]] && continue
-            if [[ "$clean_line" =~ ^[[:space:]]*([a-zA-Z0-9_\-]+)[[:space:]]*= ]]; then
-                setting_key="${BASH_REMATCH[1]}"
-                if ! grep -qE "^[[:space:]]*$setting_key[[:space:]]*=" "$OSC_CONF"; then
-                    echo "$clean_line" >> "$OSC_CONF"
-                    echo -e "  + Merged new default setting: ${CYAN}$setting_key${NC}"
-                    NEW_KEYS=$((NEW_KEYS + 1))
-                fi
-            fi
-        done < "$TEMPLATE_OSC"
-        if [ "$NEW_KEYS" -gt 0 ]; then
-            echo -e "  ${GREEN}✓ Merged $NEW_KEYS new default setting(s) into osc.conf${NC}"
-        fi
-    fi
-elif [ -f "$TEMPLATE_OSC" ]; then
-    cp "$TEMPLATE_OSC" "$OSC_CONF"
+if [ -f "$TARGET_INPUT" ]; then
+    cp "$TARGET_INPUT" "$TARGET_INPUT.bak"
+    echo -e "  ${CYAN}✓ Backed up existing input.conf -> input.conf.bak${NC}"
+fi
+if [ -f "$SRC_INPUT_DEF" ]; then
+    cp "$SRC_INPUT_DEF" "$TARGET_INPUT"
+    echo -e "  ${GREEN}✓ Replaced input.conf with latest default configuration${NC}"
+fi
+if [ -f "$EXTRACTED_ROOT/input.def.conf" ]; then
+    cp "$EXTRACTED_ROOT/input.def.conf" "$TARGET_DIR/input.def.conf"
 fi
 
-# Deploy stats.conf if not already present
-if [ ! -f "$TARGET_DIR/script-opts/stats.conf" ]; then
-    if [ -f "$EXTRACTED_ROOT/script-opts/stats.conf" ]; then
-        cp "$EXTRACTED_ROOT/script-opts/stats.conf" "$TARGET_DIR/script-opts/stats.conf"
-    elif [ -f "$EXTRACTED_ROOT/script-opts/stats.def.conf" ]; then
-        cp "$EXTRACTED_ROOT/script-opts/stats.def.conf" "$TARGET_DIR/script-opts/stats.conf"
+# 6.2 mpv.conf -> mpv.conf.bak, replace with mpv.def.conf
+TARGET_MPV="$TARGET_DIR/mpv.conf"
+SRC_MPV_DEF="$EXTRACTED_ROOT/mpv.def.conf"
+[ ! -f "$SRC_MPV_DEF" ] && SRC_MPV_DEF="$EXTRACTED_ROOT/mpv.conf"
+
+if [ -f "$TARGET_MPV" ]; then
+    cp "$TARGET_MPV" "$TARGET_MPV.bak"
+    echo -e "  ${CYAN}✓ Backed up existing mpv.conf -> mpv.conf.bak${NC}"
+fi
+if [ -f "$SRC_MPV_DEF" ]; then
+    cp "$SRC_MPV_DEF" "$TARGET_MPV"
+    echo -e "  ${GREEN}✓ Replaced mpv.conf with latest default configuration${NC}"
+fi
+if [ -f "$EXTRACTED_ROOT/mpv.def.conf" ]; then
+    cp "$EXTRACTED_ROOT/mpv.def.conf" "$TARGET_DIR/mpv.def.conf"
+fi
+
+# 6.3 script-opts/osc.conf -> osc.conf.bak, preserve TMDB API key, replace with osc.def.conf
+OSC_CONF="$TARGET_DIR/script-opts/osc.conf"
+TEMPLATE_OSC="$EXTRACTED_ROOT/script-opts/osc.def.conf"
+[ ! -f "$TEMPLATE_OSC" ] && TEMPLATE_OSC="$EXTRACTED_ROOT/script-opts/osc.conf"
+
+EXISTING_KEY=""
+if [ -f "$OSC_CONF" ]; then
+    EXISTING_KEY=$(grep -E '^[[:space:]]*tmdb_api_key[[:space:]]*=' "$OSC_CONF" | head -n1 | sed -E 's/^[[:space:]]*tmdb_api_key[[:space:]]*=[[:space:]]*//' | tr -d '\r' | sed -E 's/^["'\'']//; s/["'\'']$//' || true)
+    cp "$OSC_CONF" "$OSC_CONF.bak"
+    echo -e "  ${CYAN}✓ Backed up existing osc.conf -> osc.conf.bak${NC}"
+fi
+
+if [ -f "$TEMPLATE_OSC" ]; then
+    if [ -n "$EXISTING_KEY" ] && [ "$EXISTING_KEY" != "your_api_key_here" ]; then
+        sed "s|^tmdb_api_key=.*|tmdb_api_key=$EXISTING_KEY|" "$TEMPLATE_OSC" > "$OSC_CONF"
+        echo -e "  ${GREEN}✓ Preserved your existing TMDB API key in updated osc.conf${NC}"
+    else
+        cp "$TEMPLATE_OSC" "$OSC_CONF"
     fi
+    echo -e "  ${GREEN}✓ Replaced script-opts/osc.conf with latest default configuration${NC}"
+fi
+if [ -f "$EXTRACTED_ROOT/script-opts/osc.def.conf" ]; then
+    cp "$EXTRACTED_ROOT/script-opts/osc.def.conf" "$TARGET_DIR/script-opts/osc.def.conf"
+fi
+
+# 6.4 script-opts/stats.conf -> stats.conf.bak, replace with stats.def.conf
+STATS_CONF="$TARGET_DIR/script-opts/stats.conf"
+TEMPLATE_STATS="$EXTRACTED_ROOT/script-opts/stats.def.conf"
+[ ! -f "$TEMPLATE_STATS" ] && TEMPLATE_STATS="$EXTRACTED_ROOT/script-opts/stats.conf"
+
+if [ -f "$STATS_CONF" ]; then
+    cp "$STATS_CONF" "$STATS_CONF.bak"
+    echo -e "  ${CYAN}✓ Backed up existing stats.conf -> stats.conf.bak${NC}"
+fi
+if [ -f "$TEMPLATE_STATS" ]; then
+    cp "$TEMPLATE_STATS" "$STATS_CONF"
+    echo -e "  ${GREEN}✓ Replaced script-opts/stats.conf with latest default configuration${NC}"
+fi
+if [ -f "$EXTRACTED_ROOT/script-opts/stats.def.conf" ]; then
+    cp "$EXTRACTED_ROOT/script-opts/stats.def.conf" "$TARGET_DIR/script-opts/stats.def.conf"
 fi
 
 # Deploy subtitle presets if not already present
 if [ ! -f "$TARGET_DIR/script-opts/lumina_subtitle.json" ] && [ -f "$EXTRACTED_ROOT/script-opts/lumina_subtitle.json" ]; then
     cp "$EXTRACTED_ROOT/script-opts/lumina_subtitle.json" "$TARGET_DIR/script-opts/lumina_subtitle.json"
 fi
-
-# Deploy reference definitions
-for def in osc.def.conf stats.def.conf; do
-    if [ -f "$EXTRACTED_ROOT/script-opts/$def" ]; then
-        cp "$EXTRACTED_ROOT/script-opts/$def" "$TARGET_DIR/script-opts/$def"
-    fi
-done
 
 # Update tools & diagnostics
 if [ -d "$EXTRACTED_ROOT/tools" ]; then

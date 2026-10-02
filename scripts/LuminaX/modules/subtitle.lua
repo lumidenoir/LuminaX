@@ -427,9 +427,21 @@ end
 
 local function get_config_path()
     if config_file_path then return config_file_path end
+    if ctx_ref and ctx_ref.config_file then
+        config_file_path = ctx_ref.config_file
+        return config_file_path
+    end
     if mp and mp.command_native then
         local p = mp.command_native({'expand-path', '~~/script-opts/lumina_subtitle.json'})
-        if p and p ~= '' then config_file_path = p; return p end
+        if p and p ~= '' and p ~= '~~/script-opts/lumina_subtitle.json' then
+            config_file_path = p
+            return p
+        end
+    end
+    local xdg = os.getenv('XDG_CONFIG_HOME')
+    if xdg and xdg ~= '' then
+        config_file_path = xdg:gsub('[/\\]+$', '') .. '/mpv/script-opts/lumina_subtitle.json'
+        return config_file_path
     end
     config_file_path = (os.getenv('HOME') or '.') .. '/.config/mpv/script-opts/lumina_subtitle.json'
     return config_file_path

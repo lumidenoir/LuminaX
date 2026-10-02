@@ -42,6 +42,8 @@ Second Line of Dialogue Here
         "--idle=yes",
         "--vo=null",
         "--ao=null",
+        f"--config-dir={tmp_dir}",
+        "--no-config",
         f"--input-ipc-server={socket_path}",
         f"--scripts={script_entry}",
         "--msg-level=all=warn,LuminaX=debug"

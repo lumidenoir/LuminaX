@@ -349,6 +349,111 @@ end, true)
 assert_true("Malformed response handled gracefully", malformed_handled)
 
 
+print("\n=== 7. Testing Updater Config Backup to .bak & .def.conf Deployment ===")
+
+local function simulate_updater_backup_and_replace(files, def_templates)
+    local filesystem = {}
+    for k, v in pairs(files) do filesystem[k] = v end
+
+    local backed_up = {}
+    local deployed = {}
+
+    -- Process input.conf
+    if filesystem["input.conf"] then
+        filesystem["input.conf.bak"] = filesystem["input.conf"]
+        backed_up["input.conf"] = true
+    end
+    if def_templates["input.def.conf"] then
+        filesystem["input.conf"] = def_templates["input.def.conf"]
+        filesystem["input.def.conf"] = def_templates["input.def.conf"]
+        deployed["input.conf"] = true
+    end
+
+    -- Process mpv.conf
+    if filesystem["mpv.conf"] then
+        filesystem["mpv.conf.bak"] = filesystem["mpv.conf"]
+        backed_up["mpv.conf"] = true
+    end
+    if def_templates["mpv.def.conf"] then
+        filesystem["mpv.conf"] = def_templates["mpv.def.conf"]
+        filesystem["mpv.def.conf"] = def_templates["mpv.def.conf"]
+        deployed["mpv.conf"] = true
+    end
+
+    -- Process osc.conf
+    local existing_key = nil
+    if filesystem["script-opts/osc.conf"] then
+        existing_key = filesystem["script-opts/osc.conf"]:match('tmdb_api_key%s*=%s*([^\r\n]+)')
+        if existing_key then
+            existing_key = existing_key:gsub('^["\']', ''):gsub('["\']$', '')
+        end
+        filesystem["script-opts/osc.conf.bak"] = filesystem["script-opts/osc.conf"]
+        backed_up["script-opts/osc.conf"] = true
+    end
+    if def_templates["script-opts/osc.def.conf"] then
+        local new_osc = def_templates["script-opts/osc.def.conf"]
+        if existing_key and existing_key ~= "your_api_key_here" then
+            new_osc = new_osc:gsub('tmdb_api_key%s*=[^\r\n]*', 'tmdb_api_key=' .. existing_key)
+        end
+        filesystem["script-opts/osc.conf"] = new_osc
+        filesystem["script-opts/osc.def.conf"] = def_templates["script-opts/osc.def.conf"]
+        deployed["script-opts/osc.conf"] = true
+    end
+
+    -- Process stats.conf
+    if filesystem["script-opts/stats.conf"] then
+        filesystem["script-opts/stats.conf.bak"] = filesystem["script-opts/stats.conf"]
+        backed_up["script-opts/stats.conf"] = true
+    end
+    if def_templates["script-opts/stats.def.conf"] then
+        filesystem["script-opts/stats.conf"] = def_templates["script-opts/stats.def.conf"]
+        filesystem["script-opts/stats.def.conf"] = def_templates["script-opts/stats.def.conf"]
+        deployed["script-opts/stats.conf"] = true
+    end
+
+    return filesystem, backed_up, deployed
+end
+
+local mock_user_fs = {
+    ["input.conf"] = "# Old custom bindings\nSPACE cycle pause\n",
+    ["mpv.conf"] = "# Old mpv conf\nvo=gpu\n",
+    ["script-opts/osc.conf"] = "tmdb_api_key=secret_user_api_key_12345\n",
+    ["script-opts/stats.conf"] = "custom_stat=yes\n",
+}
+
+local mock_release_defs = {
+    ["input.def.conf"] = "# Full LuminaX Bindings\nAlt+s script-binding LuminaX/menu-sub-config\nLEFT no-osd seek -10; script-message seek-hud -10\n",
+    ["mpv.def.conf"] = "# Modern mpv.def.conf\nvo=gpu-next\nhwdec=auto-safe\n",
+    ["script-opts/osc.def.conf"] = "tmdb_api_key=your_api_key_here\nscalewindowed=1.0\n",
+    ["script-opts/stats.def.conf"] = "font_size=12\n",
+}
+
+local updated_fs, backed_up, deployed = simulate_updater_backup_and_replace(mock_user_fs, mock_release_defs)
+
+-- 7.1 Verify .bak files are created with old content intact
+assert_true("input.conf.bak was created", updated_fs["input.conf.bak"] ~= nil)
+assert_eq("input.conf.bak preserves original user content", updated_fs["input.conf.bak"], "# Old custom bindings\nSPACE cycle pause\n")
+assert_true("mpv.conf.bak was created", updated_fs["mpv.conf.bak"] ~= nil)
+assert_eq("mpv.conf.bak preserves original user content", updated_fs["mpv.conf.bak"], "# Old mpv conf\nvo=gpu\n")
+assert_true("osc.conf.bak was created", updated_fs["script-opts/osc.conf.bak"] ~= nil)
+assert_true("stats.conf.bak was created", updated_fs["script-opts/stats.conf.bak"] ~= nil)
+
+-- 7.2 Verify normal .conf files are replaced with .def templates
+assert_true("input.conf contains new Alt+s binding", updated_fs["input.conf"]:find("Alt+s script-binding LuminaX/menu-sub-config", 1, true) ~= nil)
+assert_true("input.conf contains seek-hud binding", updated_fs["input.conf"]:find("script-message seek-hud -10", 1, true) ~= nil)
+assert_true("mpv.conf contains hwdec=auto-safe", updated_fs["mpv.conf"]:find("hwdec=auto-safe", 1, true) ~= nil)
+
+-- 7.3 Verify TMDB key is preserved in the newly deployed osc.conf
+assert_true("osc.conf has user's preserved API key", updated_fs["script-opts/osc.conf"]:find("tmdb_api_key=secret_user_api_key_12345") ~= nil)
+assert_true("osc.conf does not have placeholder key", updated_fs["script-opts/osc.conf"]:find("your_api_key_here") == nil)
+
+-- 7.4 Verify reference .def.conf files are in place
+assert_true("input.def.conf is deployed", updated_fs["input.def.conf"] ~= nil)
+assert_true("mpv.def.conf is deployed", updated_fs["mpv.def.conf"] ~= nil)
+assert_true("osc.def.conf is deployed", updated_fs["script-opts/osc.def.conf"] ~= nil)
+assert_true("stats.def.conf is deployed", updated_fs["script-opts/stats.def.conf"] ~= nil)
+
+
 print(string.format("\n========================================================"))
 print(string.format("Updater & Config Security Matrix: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))
 print(string.format("========================================================"))

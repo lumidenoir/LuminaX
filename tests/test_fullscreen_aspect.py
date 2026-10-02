@@ -49,6 +49,8 @@ Second Line of Dialogue Flowing Seamlessly
         "xvfb-run", "-a", "mpv",
         "--idle=yes",
         "--load-scripts=no",
+        f"--config-dir={tmp_dir}",
+        "--no-config",
         "--vo=gpu",
         "--gpu-context=x11egl",
         "--geometry=1920x1080",

@@ -62,21 +62,34 @@ def build_packages():
             shutil.copy2(os.path.join("scripts", s), os.path.join(stage_dir, "scripts", s))
     # Copy fonts
     shutil.copytree("fonts", os.path.join(stage_dir, "fonts"), dirs_exist_ok=True)
-    # Copy script-opts
+    # Copy script-opts (generate dist normal confs from canonical .def.conf templates)
     os.makedirs(os.path.join(stage_dir, "script-opts"), exist_ok=True)
-    clean_osc_conf("script-opts/osc.conf", os.path.join(stage_dir, "script-opts", "osc.conf"))
+    osc_src = "script-opts/osc.def.conf" if os.path.exists("script-opts/osc.def.conf") else "script-opts/osc.conf"
+    clean_osc_conf(osc_src, os.path.join(stage_dir, "script-opts", "osc.conf"))
     if os.path.exists("script-opts/osc.def.conf"):
-        shutil.copy2("script-opts/osc.def.conf", os.path.join(stage_dir, "script-opts", "osc.def.conf"))
-    if os.path.exists("script-opts/stats.conf"):
-        shutil.copy2("script-opts/stats.conf", os.path.join(stage_dir, "script-opts", "stats.conf"))
+        clean_osc_conf("script-opts/osc.def.conf", os.path.join(stage_dir, "script-opts", "osc.def.conf"))
+
+    stats_src = "script-opts/stats.def.conf" if os.path.exists("script-opts/stats.def.conf") else "script-opts/stats.conf"
+    if os.path.exists(stats_src):
+        shutil.copy2(stats_src, os.path.join(stage_dir, "script-opts", "stats.conf"))
     if os.path.exists("script-opts/stats.def.conf"):
         shutil.copy2("script-opts/stats.def.conf", os.path.join(stage_dir, "script-opts", "stats.def.conf"))
+
     if os.path.exists("script-opts/lumina_subtitle.json"):
         shutil.copy2("script-opts/lumina_subtitle.json", os.path.join(stage_dir, "script-opts", "lumina_subtitle.json"))
-    # Copy config templates & references
-    for conf_file in ["input.conf", "input.def.conf", "mpv.conf", "mpv.def.conf"]:
-        if os.path.exists(conf_file):
-            shutil.copy2(conf_file, os.path.join(stage_dir, conf_file))
+
+    # Copy config templates (make .def.conf into the dist normal .conf files & include references)
+    if os.path.exists("input.def.conf"):
+        shutil.copy2("input.def.conf", os.path.join(stage_dir, "input.conf"))
+        shutil.copy2("input.def.conf", os.path.join(stage_dir, "input.def.conf"))
+    elif os.path.exists("input.conf"):
+        shutil.copy2("input.conf", os.path.join(stage_dir, "input.conf"))
+
+    if os.path.exists("mpv.def.conf"):
+        shutil.copy2("mpv.def.conf", os.path.join(stage_dir, "mpv.conf"))
+        shutil.copy2("mpv.def.conf", os.path.join(stage_dir, "mpv.def.conf"))
+    elif os.path.exists("mpv.conf"):
+        shutil.copy2("mpv.conf", os.path.join(stage_dir, "mpv.conf"))
     # Copy README
     if os.path.exists("README.md"):
         shutil.copy2("README.md", os.path.join(stage_dir, "README.md"))
@@ -108,13 +121,16 @@ def build_packages():
     os.chmod(os.path.join(stage_dir, "update.sh"), 0o755)
     os.chmod(os.path.join(stage_dir, "verify_installation.py"), 0o755)
 
+    ARCHIVE_ROOT_DIR = "LuminaX"
+
     with tarfile.open(linux_tar, "w:gz") as tar:
         for item in sorted(os.listdir(stage_dir)):
             if item in ["install.bat", "install.ps1", "update.bat", "update.ps1"]:
                 continue
             item_path = os.path.join(stage_dir, item)
-            tar.add(item_path, arcname=item)
-            print(f"  + Added: {item}")
+            tar_arcname = f"{ARCHIVE_ROOT_DIR}/{item}"
+            tar.add(item_path, arcname=tar_arcname)
+            print(f"  + Added: {tar_arcname}")
 
     print(f"  ✓ Created: {linux_tar} ({os.path.getsize(linux_tar):,} bytes)")
 
@@ -139,9 +155,10 @@ def build_packages():
         for root, dirs, files in os.walk(stage_dir):
             for file in sorted(files):
                 full_path = os.path.join(root, file)
-                rel_path = os.path.relpath(full_path, stage_dir)
-                zipf.write(full_path, arcname=rel_path)
-                print(f"  + Added: {rel_path}")
+                rel_path = os.path.relpath(full_path, stage_dir).replace("\\", "/")
+                zip_arcname = f"{ARCHIVE_ROOT_DIR}/{rel_path}"
+                zipf.write(full_path, arcname=zip_arcname)
+                print(f"  + Added: {zip_arcname}")
 
     print(f"  ✓ Created: {win_zip} ({os.path.getsize(win_zip):,} bytes)")
 

@@ -150,7 +150,21 @@ fi
 
 # 5. Check and configure mpv.conf (Critical for disabling stock controller)
 MPV_CONF="$TARGET_DIR/mpv.conf"
-touch "$MPV_CONF"
+if [ ! -f "$MPV_CONF" ]; then
+    if [ -f "$PACKAGE_ROOT/mpv.def.conf" ]; then
+        echo "Creating mpv.conf from reference template..."
+        cp "$PACKAGE_ROOT/mpv.def.conf" "$MPV_CONF"
+    elif [ -f "$PACKAGE_ROOT/mpv.conf" ]; then
+        echo "Creating mpv.conf from template..."
+        cp "$PACKAGE_ROOT/mpv.conf" "$MPV_CONF"
+    else
+        touch "$MPV_CONF"
+    fi
+fi
+
+if [ -f "$PACKAGE_ROOT/mpv.def.conf" ]; then
+    cp "$PACKAGE_ROOT/mpv.def.conf" "$TARGET_DIR/mpv.def.conf"
+fi
 
 if ! grep -q "^osc=no" "$MPV_CONF" && ! grep -q "^osc = no" "$MPV_CONF"; then
     echo "Adding 'osc=no' to $MPV_CONF..."
@@ -173,13 +187,16 @@ fi
 # 6. Check and configure input.conf (for LuminaX glass menu keybindings)
 INPUT_CONF="$TARGET_DIR/input.conf"
 if [ ! -f "$INPUT_CONF" ]; then
-    if [ -f "$PACKAGE_ROOT/input.conf" ]; then
+    if [ -f "$PACKAGE_ROOT/input.def.conf" ]; then
+        echo "Creating input.conf from canonical reference template..."
+        cp "$PACKAGE_ROOT/input.def.conf" "$INPUT_CONF"
+    elif [ -f "$PACKAGE_ROOT/input.conf" ]; then
         echo "Creating input.conf with LuminaX keybindings..."
         cp "$PACKAGE_ROOT/input.conf" "$INPUT_CONF"
     fi
 elif [ "$CANON_PKG" != "$CANON_TARGET" ]; then
-    if ! grep -q "menu-playlist" "$INPUT_CONF"; then
-        echo "Adding LuminaX menu shortcuts (Tab, p, c, a, s) to $INPUT_CONF..."
+    if ! grep -q "menu-sub-config" "$INPUT_CONF" || ! grep -q "menu-playlist" "$INPUT_CONF"; then
+        echo "Adding LuminaX menu shortcuts (Tab, p, c, a, s, Alt+s, V, T, U) to $INPUT_CONF..."
         cat << 'EOF' >> "$INPUT_CONF"
 
 # LuminaX Interactive Glass Menus & OSD
@@ -192,8 +209,13 @@ Alt+s             script-binding LuminaX/menu-sub-config
 V                 script-binding LuminaX/menu-video
 T                 script-binding LuminaX/toggle-tags-menu
 Ctrl+t            script-binding LuminaX/toggle-tags-menu-ctrl
+U                 script-binding LuminaX/check-update
 EOF
     fi
+fi
+
+if [ -f "$PACKAGE_ROOT/input.def.conf" ]; then
+    cp "$PACKAGE_ROOT/input.def.conf" "$TARGET_DIR/input.def.conf"
 fi
 
 echo -e "\n${GREEN}======================================================================${NC}"

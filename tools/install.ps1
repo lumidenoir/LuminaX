@@ -520,7 +520,7 @@ foreach ($defConf in @("osc.def.conf", "stats.def.conf")) {
 # 5.2 mpv.conf (Disable default mpv OSC to prevent dual-controller collision)
 $mpvConf = Join-Path $resolvedTargetDir "mpv.conf"
 $srcMpv = $null
-foreach ($cand in @((Join-Path $PackageRoot "mpv.conf"), (Join-Path $PackageRoot "mpv.def.conf"))) {
+foreach ($cand in @((Join-Path $PackageRoot "mpv.def.conf"), (Join-Path $PackageRoot "mpv.conf"))) {
     if (Test-Path $cand) {
         $srcMpv = $cand
         break
@@ -548,6 +548,11 @@ geometry=50%:50%
     }
 }
 
+$defMpv = Join-Path $PackageRoot "mpv.def.conf"
+if (Test-Path $defMpv) {
+    Copy-Item -Path $defMpv -Destination (Join-Path $resolvedTargetDir "mpv.def.conf") -Force
+}
+
 $existingMpv = Get-Content -Path $mpvConf -Raw -ErrorAction SilentlyContinue
 $appendLines = @()
 if ($existingMpv -notmatch '(?m)^\s*osc\s*=\s*no') {
@@ -572,7 +577,7 @@ if ($appendLines.Count -gt 0) {
 # 5.3 input.conf (Interactive Glass Menu Keybindings)
 $inputConf = Join-Path $resolvedTargetDir "input.conf"
 $srcInput = $null
-foreach ($cand in @((Join-Path $PackageRoot "input.conf"), (Join-Path $PackageRoot "input.def.conf"))) {
+foreach ($cand in @((Join-Path $PackageRoot "input.def.conf"), (Join-Path $PackageRoot "input.conf"))) {
     if (Test-Path $cand) {
         $srcInput = $cand
         break
@@ -593,6 +598,7 @@ Alt+s             script-binding LuminaX/menu-sub-config
 V                 script-binding LuminaX/menu-video
 T                 script-binding LuminaX/toggle-tags-menu
 Ctrl+t            script-binding LuminaX/toggle-tags-menu-ctrl
+U                 script-binding LuminaX/check-update
 "@
 
 if (-not (Test-Path $inputConf)) {
@@ -604,12 +610,17 @@ if (-not (Test-Path $inputConf)) {
     Write-Success "Created input.conf with LuminaX keybindings"
 } else {
     $existingInput = Get-Content -Path $inputConf -Raw -ErrorAction SilentlyContinue
-    if ($existingInput -notmatch 'LuminaX/menu-playlist' -and $existingInput -notmatch 'menu-playlist') {
+    if (($existingInput -notmatch 'menu-sub-config') -or ($existingInput -notmatch 'LuminaX/menu-playlist' -and $existingInput -notmatch 'menu-playlist')) {
         [System.IO.File]::AppendAllText($inputConf, "`n" + $menuBindings, $utf8NoBom)
-        Write-Success "Added LuminaX menu shortcuts (Tab, p, c, a, s, Alt+s, V, T) to input.conf"
+        Write-Success "Added LuminaX menu shortcuts (Tab, p, c, a, s, Alt+s, V, T, U) to input.conf"
     } else {
         Write-Success "input.conf already contains LuminaX shortcuts"
     }
+}
+
+$defInput = Join-Path $PackageRoot "input.def.conf"
+if (Test-Path $defInput) {
+    Copy-Item -Path $defInput -Destination (Join-Path $resolvedTargetDir "input.def.conf") -Force
 }
 
 # -----------------------------------------------------------------------------

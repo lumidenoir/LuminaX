@@ -245,47 +245,101 @@ try {
         Write-Success "Updated UI and icon fonts"
     }
 
-    # 4.3 Preserve & Merge script-opts\osc.conf (Zero-Clobber Guarantee)
-    $oscConfDest = Join-Path $resolvedTargetDir "script-opts\osc.conf"
-    $templateOsc = Join-Path $extractedRoot "script-opts\osc.conf"
-    if (-not (Test-Path $templateOsc)) { $templateOsc = Join-Path $extractedRoot "script-opts\osc.def.conf" }
-
+    # 4.3 Backup previous config files to .bak and replace with .def.conf templates as normal configs
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+    # 4.3.1 input.conf -> input.conf.bak, replace with input.def.conf
+    $targetInput = Join-Path $resolvedTargetDir "input.conf"
+    $srcInputDef = Join-Path $extractedRoot "input.def.conf"
+    if (-not (Test-Path $srcInputDef)) { $srcInputDef = Join-Path $extractedRoot "input.conf" }
+
+    if (Test-Path $targetInput) {
+        Copy-Item -Path $targetInput -Destination ($targetInput + ".bak") -Force
+        Write-InfoMsg "Backed up existing input.conf -> input.conf.bak"
+    }
+    if (Test-Path $srcInputDef) {
+        Copy-Item -Path $srcInputDef -Destination $targetInput -Force
+        Write-Success "Replaced input.conf with latest default configuration"
+    }
+    $defInput = Join-Path $extractedRoot "input.def.conf"
+    if (Test-Path $defInput) {
+        Copy-Item -Path $defInput -Destination (Join-Path $resolvedTargetDir "input.def.conf") -Force
+    }
+
+    # 4.3.2 mpv.conf -> mpv.conf.bak, replace with mpv.def.conf
+    $targetMpv = Join-Path $resolvedTargetDir "mpv.conf"
+    $srcMpvDef = Join-Path $extractedRoot "mpv.def.conf"
+    if (-not (Test-Path $srcMpvDef)) { $srcMpvDef = Join-Path $extractedRoot "mpv.conf" }
+
+    if (Test-Path $targetMpv) {
+        Copy-Item -Path $targetMpv -Destination ($targetMpv + ".bak") -Force
+        Write-InfoMsg "Backed up existing mpv.conf -> mpv.conf.bak"
+    }
+    if (Test-Path $srcMpvDef) {
+        Copy-Item -Path $srcMpvDef -Destination $targetMpv -Force
+        Write-Success "Replaced mpv.conf with latest default configuration"
+    }
+    $defMpv = Join-Path $extractedRoot "mpv.def.conf"
+    if (Test-Path $defMpv) {
+        Copy-Item -Path $defMpv -Destination (Join-Path $resolvedTargetDir "mpv.def.conf") -Force
+    }
+
+    # 4.3.3 script-opts\osc.conf -> osc.conf.bak, preserve TMDB API key, replace with osc.def.conf
+    $oscConfDest = Join-Path $resolvedTargetDir "script-opts\osc.conf"
+    $templateOsc = Join-Path $extractedRoot "script-opts\osc.def.conf"
+    if (-not (Test-Path $templateOsc)) { $templateOsc = Join-Path $extractedRoot "script-opts\osc.conf" }
+
+    $existingKey = $null
     if (Test-Path $oscConfDest) {
         $existingOsc = Get-Content -Path $oscConfDest -Raw
-        $existingKey = $null
         if ($existingOsc -match '(?m)^\s*tmdb_api_key\s*=\s*([^\r\n]+)') {
             $extractedKey = $matches[1].Trim().Trim('"').Trim("'")
             if ($extractedKey -and $extractedKey -ne "your_api_key_here") {
                 $existingKey = $extractedKey
             }
         }
+        Copy-Item -Path $oscConfDest -Destination ($oscConfDest + ".bak") -Force
+        Write-InfoMsg "Backed up existing osc.conf -> osc.conf.bak"
+    }
 
-        # Check for new settings in template (e.g. tmdb_cache_max_mb)
-        if (Test-Path $templateOsc) {
-            $newSettings = @()
-            $templateLines = Get-Content -Path $templateOsc
-            foreach ($line in $templateLines) {
-                if ($line -match '^\s*([a-zA-Z0-9_\-]+)\s*=') {
-                    $settingName = $matches[1]
-                    if ($existingOsc -notmatch "(?m)^\s*$settingName\s*=") {
-                        $newSettings += $line
-                    }
-                }
-            }
-            if ($newSettings.Count -gt 0) {
-                $appendBlock = "`n# Newly added settings from v$latestTag`n" + ($newSettings -join "`n")
-                [System.IO.File]::AppendAllText($oscConfDest, $appendBlock, $utf8NoBom)
-                Write-Success "Merged $($newSettings.Count) new settings into script-opts\osc.conf"
-            }
-        }
+    if (Test-Path $templateOsc) {
         if ($existingKey) {
-            Write-Success "Preserved existing TMDB API key in osc.conf"
+            $newOscContent = Get-Content -Path $templateOsc -Raw
+            $newOscContent = $newOscContent -replace '(?m)^\s*tmdb_api_key\s*=.*', "tmdb_api_key=$existingKey"
+            [System.IO.File]::WriteAllText($oscConfDest, $newOscContent, $utf8NoBom)
+            Write-Success "Preserved existing TMDB API key in updated osc.conf"
+        } else {
+            Copy-Item -Path $templateOsc -Destination $oscConfDest -Force
         }
-    } elseif (Test-Path $templateOsc) {
-        Copy-Item -Path $templateOsc -Destination $oscConfDest -Force
-        Write-Success "Created script-opts\osc.conf from template"
+        Write-Success "Replaced script-opts\osc.conf with latest default configuration"
+    }
+    $defOsc = Join-Path $extractedRoot "script-opts\osc.def.conf"
+    if (Test-Path $defOsc) {
+        Copy-Item -Path $defOsc -Destination (Join-Path $resolvedTargetDir "script-opts\osc.def.conf") -Force
+    }
+
+    # 4.3.4 script-opts\stats.conf -> stats.conf.bak, replace with stats.def.conf
+    $statsDest = Join-Path $resolvedTargetDir "script-opts\stats.conf"
+    $templateStats = Join-Path $extractedRoot "script-opts\stats.def.conf"
+    if (-not (Test-Path $templateStats)) { $templateStats = Join-Path $extractedRoot "script-opts\stats.conf" }
+
+    if (Test-Path $statsDest) {
+        Copy-Item -Path $statsDest -Destination ($statsDest + ".bak") -Force
+        Write-InfoMsg "Backed up existing stats.conf -> stats.conf.bak"
+    }
+    if (Test-Path $templateStats) {
+        Copy-Item -Path $templateStats -Destination $statsDest -Force
+        Write-Success "Replaced script-opts\stats.conf with latest default configuration"
+    }
+    $defStats = Join-Path $extractedRoot "script-opts\stats.def.conf"
+    if (Test-Path $defStats) {
+        Copy-Item -Path $defStats -Destination (Join-Path $resolvedTargetDir "script-opts\stats.def.conf") -Force
+    }
+
+    # Deploy subtitle presets if not already present
+    $subJsonDest = Join-Path $resolvedTargetDir "script-opts\lumina_subtitle.json"
+    if ((-not (Test-Path $subJsonDest)) -and (Test-Path (Join-Path $extractedRoot "script-opts\lumina_subtitle.json"))) {
+        Copy-Item -Path (Join-Path $extractedRoot "script-opts\lumina_subtitle.json") -Destination $subJsonDest -Force -ErrorAction SilentlyContinue
     }
 
     # 4.4 Update tools and helper scripts inside target
@@ -298,29 +352,6 @@ try {
         Copy-Item -Path "$extractedRoot\verify_installation.py" -Destination (Join-Path $destTools "verify_installation.py") -Force -ErrorAction SilentlyContinue
     }
     Copy-Item -Path $PSCommandPath -Destination (Join-Path $destTools "update.ps1") -Force -ErrorAction SilentlyContinue
-
-    # Deploy reference configs & stats.conf if missing
-    foreach ($defConf in @("osc.def.conf", "stats.def.conf")) {
-        $srcDef = Join-Path $extractedRoot "script-opts\$defConf"
-        if (Test-Path $srcDef) {
-            Copy-Item -Path $srcDef -Destination (Join-Path $resolvedTargetDir "script-opts\$defConf") -Force -ErrorAction SilentlyContinue
-        }
-    }
-    $statsDest = Join-Path $resolvedTargetDir "script-opts\stats.conf"
-    if (-not (Test-Path $statsDest)) {
-        $srcStats = Join-Path $extractedRoot "script-opts\stats.conf"
-        if (-not (Test-Path $srcStats)) { $srcStats = Join-Path $extractedRoot "script-opts\stats.def.conf" }
-        if (Test-Path $srcStats) {
-            Copy-Item -Path $srcStats -Destination $statsDest -Force -ErrorAction SilentlyContinue
-        }
-    }
-    $subJsonDest = Join-Path $resolvedTargetDir "script-opts\lumina_subtitle.json"
-    if (-not (Test-Path $subJsonDest)) {
-        $srcSub = Join-Path $extractedRoot "script-opts\lumina_subtitle.json"
-        if (Test-Path $srcSub) {
-            Copy-Item -Path $srcSub -Destination $subJsonDest -Force -ErrorAction SilentlyContinue
-        }
-    }
 
     # Place convenient 1-click update.bat in root of target directory
     $rootUpdateBat = Join-Path $resolvedTargetDir "update.bat"
