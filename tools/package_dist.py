@@ -210,7 +210,7 @@ def generate_release_body(dist_dir, checksums):
 
     categories = {
         "🚀 Features & Enhancements": [],
-        "🐛 Bug Fixes": [],
+        "🐛 Bug Fixes & Patches": [],
         "🛠 Maintenance & Performance": []
     }
 
@@ -222,10 +222,10 @@ def generate_release_body(dist_dir, checksums):
         msg = parts[1] if len(parts) > 1 else ""
         link = f"[{h}]({repo_url}/commit/{h})" if repo_url else f"({h})"
 
-        if re.match(r"^feat(\(.*\))?!?:", msg, re.I):
+        if re.match(r"^(feat|tweak)(\(.*\))?!?:", msg, re.I):
             categories["🚀 Features & Enhancements"].append(f"- {msg} ({link})")
-        elif re.match(r"^fix(\(.*\))?!?:", msg, re.I):
-            categories["🐛 Bug Fixes"].append(f"- {msg} ({link})")
+        elif re.match(r"^(fix|patch|bug)(\(.*\))?!?:", msg, re.I):
+            categories["🐛 Bug Fixes & Patches"].append(f"- {msg} ({link})")
         else:
             categories["🛠 Maintenance & Performance"].append(f"- {msg} ({link})")
 

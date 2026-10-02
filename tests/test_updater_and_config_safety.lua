@@ -305,9 +305,9 @@ updater.init({
 -- 6.1 Status is nil before any check
 assert_eq("Initial update status is nil", updater.get_update_status(), nil)
 
--- 6.2 Simulate successful newer release detection
+-- 6.2 Simulate successful newer release detection (v2.0.0 vs current)
 mock_async_ok = true
-mock_async_result = { stdout = '{"tag_name": "v1.2.0", "html_url": "https://github.com/lumidenoir/LuminaX/releases/tag/v1.2.0"}' }
+mock_async_result = { stdout = '{"tag_name": "v4.0.0", "html_url": "https://github.com/lumidenoir/LuminaX/releases/tag/v4.0.0"}' }
 
 local detected_newer = false
 local detected_ver = nil
@@ -316,8 +316,8 @@ updater.check_for_updates(function(is_newer, ver, info)
     detected_ver = ver
 end, true)
 
-assert_true("Newer version v1.2.0 detected", detected_newer == true)
-assert_eq("Detected version string parsed correctly", detected_ver, "1.2.0")
+assert_true("Newer version v4.0.0 detected", detected_newer == true)
+assert_eq("Detected version string parsed correctly", detected_ver, "4.0.0")
 assert_true("State holds active update_available record", updater.get_update_status() ~= nil)
 
 -- 6.3 Simulate current or older release (v1.0.0 vs current v1.1.0)
