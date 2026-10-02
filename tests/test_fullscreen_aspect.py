@@ -46,13 +46,15 @@ Second Line of Dialogue Flowing Seamlessly
     script_dir = os.path.abspath("scripts/LuminaX")
 
     cmd = [
-        "xvfb-run", "-a", "mpv",
+        "xvfb-run", "-a", "-s", "-screen 0 1920x1080x24",
+        "mpv",
         "--idle=yes",
+        "--loop-file=inf",
         "--load-scripts=no",
         f"--config-dir={tmp_dir}",
         "--no-config",
         "--vo=gpu",
-        "--gpu-context=x11egl",
+        "--gpu-context=auto",
         "--geometry=1920x1080",
         "--fullscreen=yes",
         f"--input-ipc-server={socket_path}",
@@ -78,7 +80,7 @@ Second Line of Dialogue Flowing Seamlessly
             time.sleep(0.05)
 
     assert sock is not None, "Failed to connect to mpv IPC server"
-    print("  ✓ Fullscreen X11 EGL instance initialized and connected via IPC")
+    print("  ✓ Fullscreen X11 instance initialized and connected via IPC")
 
     req_id = 0
     recv_buf = ""
@@ -109,12 +111,20 @@ Second Line of Dialogue Flowing Seamlessly
     res = send_cmd(["loadfile", video_path, "replace"])
     assert res.get("error") == "success"
     send_cmd(["sub-add", sub_path, "select"])
-    time.sleep(0.8)
 
-    # B. Test 2.40:1 Cinemascope OSD dimensions
-    dims = send_cmd(["get_property", "osd-dimensions"]).get("data", {})
-    print(f"  ✓ Fullscreen 1080p Dimensions: {dims.get('w')}x{dims.get('h')} (Margins: mt={dims.get('mt')}, mb={dims.get('mb')})")
-    assert dims.get("mb", 0) > 0, "Cinemascope video should produce top and bottom letterbox margins"
+    # B. Test 2.40:1 Cinemascope OSD dimensions (poll until video frame is presented)
+    dims = {}
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        res = send_cmd(["get_property", "osd-dimensions"])
+        data = res.get("data") if res else None
+        if data and data.get("w", 0) > 0 and data.get("h", 0) > 0 and data.get("mb", 0) > 0:
+            dims = data
+            break
+        time.sleep(0.1)
+
+    print(f"  ✓ Fullscreen Dimensions: {dims.get('w')}x{dims.get('h')} (Margins: mt={dims.get('mt')}, mb={dims.get('mb')})")
+    assert dims.get("mb", 0) > 0, f"Cinemascope video should produce top and bottom letterbox margins, got {dims}"
 
     # C. Verify sub-use-margins toggle
     use_marg = send_cmd(["get_property", "sub-use-margins"]).get("data")

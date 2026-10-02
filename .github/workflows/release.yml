@@ -28,9 +28,9 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.1 mpv ffmpeg
+          sudo apt-get install -y lua5.1 mpv ffmpeg xvfb
 
-      - name: Run Test Suite (505 Assertions)
+      - name: Run Test Suite
         run: python3 tests/run_all_tests.py
 
       - name: Build Distribution Packages & Changelog
