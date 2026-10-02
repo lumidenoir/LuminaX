@@ -421,8 +421,19 @@ function M.mult_alpha(a, b)
 end
 
 -- Collect badge table (shared between OSC bar and screensaver)
-function M.collect_media_badges()
+function M.collect_media_badges(state)
     local badges = {}
+
+    -- 0. Software Update Pill (Radiant visionOS Cyan)
+    if state and state.update_available then
+        table.insert(badges, {
+            text = 'UPDATE v' .. tostring(state.update_available.version or 'NEW'),
+            w    = 84,
+            fg   = '60E0FF',
+            bg   = '08080A',
+            bord = '60E0FF'
+        })
+    end
 
     -- 1. Video Resolution (Vibrant Electric Cyan / High-Contrast Studio Silver)
     local vw = mp.get_property_number('video-params/w', 0)

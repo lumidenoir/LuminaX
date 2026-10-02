@@ -35,8 +35,12 @@ if [ -n "${1:-}" ]; then
     TARGET_DIR="$1"
 elif [ -n "${XDG_CONFIG_HOME:-}" ]; then
     TARGET_DIR="$XDG_CONFIG_HOME/mpv"
-elif [ "$(uname -s)" = "Darwin" ] && [ -d "$HOME/Library/Application Support/mpv" ]; then
-    TARGET_DIR="$HOME/Library/Application Support/mpv"
+elif [ "$(uname -s)" = "Darwin" ]; then
+    if [ -d "$HOME/Library/Application Support/mpv" ] || [ ! -d "$HOME/.config/mpv" ]; then
+        TARGET_DIR="$HOME/Library/Application Support/mpv"
+    else
+        TARGET_DIR="$HOME/.config/mpv"
+    fi
 else
     TARGET_DIR="$HOME/.config/mpv"
 fi
@@ -68,6 +72,20 @@ else
 
     echo "Installing UI & icon fonts to mpv/fonts/..."
     cp -r "$PACKAGE_ROOT/fonts/"* "$TARGET_DIR/fonts/"
+
+    echo "Installing updater tools & diagnostics..."
+    mkdir -p "$TARGET_DIR/tools"
+    if [ -d "$PACKAGE_ROOT/tools" ]; then
+        cp -r "$PACKAGE_ROOT/tools/"* "$TARGET_DIR/tools/" 2>/dev/null || true
+    fi
+    for t in "$PACKAGE_ROOT/update.sh" "$PACKAGE_ROOT/verify_installation.py"; do
+        if [ -f "$t" ]; then cp "$t" "$TARGET_DIR/tools/"; fi
+    done
+    chmod +x "$TARGET_DIR/tools/"*.sh 2>/dev/null || true
+
+    # Place convenient 1-click update.sh in target root
+    cp "$TARGET_DIR/tools/update.sh" "$TARGET_DIR/update.sh" 2>/dev/null || true
+    chmod +x "$TARGET_DIR/update.sh" 2>/dev/null || true
 fi
 
 # Optional: also install to system/user fonts
@@ -86,16 +104,15 @@ else
     fi
 fi
 
-# 4. Install script-opts/osc.conf (preserve existing TMDB API key if set)
+# 4. Install script-opts configs & presets
 OSC_CONF_DEST="$TARGET_DIR/script-opts/osc.conf"
 if [ "$CANON_PKG" != "$CANON_TARGET" ]; then
     if [ -f "$OSC_CONF_DEST" ]; then
         EXISTING_KEY=$(grep "^tmdb_api_key=" "$OSC_CONF_DEST" | cut -d= -f2- || true)
         if [ -n "$EXISTING_KEY" ] && [ "$EXISTING_KEY" != '""' ] && [ "$EXISTING_KEY" != "your_api_key_here" ]; then
             echo -e "${GREEN}✓ Preserving your existing TMDB API key in osc.conf${NC}"
-            # Copy template but restore key
-            cp "$PACKAGE_ROOT/script-opts/osc.conf" "$OSC_CONF_DEST.new"
-            sed -i "s|^tmdb_api_key=.*|tmdb_api_key=$EXISTING_KEY|" "$OSC_CONF_DEST.new"
+            # Portable POSIX sed stream without in-place flag difference across BSD/GNU
+            sed "s|^tmdb_api_key=.*|tmdb_api_key=$EXISTING_KEY|" "$PACKAGE_ROOT/script-opts/osc.conf" > "$OSC_CONF_DEST.new"
             mv "$OSC_CONF_DEST.new" "$OSC_CONF_DEST"
         else
             echo "Updating script-opts/osc.conf..."
@@ -105,6 +122,30 @@ if [ "$CANON_PKG" != "$CANON_TARGET" ]; then
         echo "Creating script-opts/osc.conf..."
         cp "$PACKAGE_ROOT/script-opts/osc.conf" "$OSC_CONF_DEST"
     fi
+
+    # Deploy stats.conf if not already existing
+    if [ ! -f "$TARGET_DIR/script-opts/stats.conf" ]; then
+        if [ -f "$PACKAGE_ROOT/script-opts/stats.conf" ]; then
+            cp "$PACKAGE_ROOT/script-opts/stats.conf" "$TARGET_DIR/script-opts/stats.conf"
+            echo "Installed visionOS stats configuration (script-opts/stats.conf)"
+        elif [ -f "$PACKAGE_ROOT/script-opts/stats.def.conf" ]; then
+            cp "$PACKAGE_ROOT/script-opts/stats.def.conf" "$TARGET_DIR/script-opts/stats.conf"
+            echo "Installed visionOS stats configuration from reference"
+        fi
+    fi
+
+    # Deploy subtitle preset lumina_subtitle.json if not already present
+    if [ ! -f "$TARGET_DIR/script-opts/lumina_subtitle.json" ] && [ -f "$PACKAGE_ROOT/script-opts/lumina_subtitle.json" ]; then
+        cp "$PACKAGE_ROOT/script-opts/lumina_subtitle.json" "$TARGET_DIR/script-opts/lumina_subtitle.json"
+        echo "Installed visionOS subtitle presets (script-opts/lumina_subtitle.json)"
+    fi
+
+    # Deploy reference definitions
+    for def in osc.def.conf stats.def.conf; do
+        if [ -f "$PACKAGE_ROOT/script-opts/$def" ]; then
+            cp "$PACKAGE_ROOT/script-opts/$def" "$TARGET_DIR/script-opts/$def"
+        fi
+    done
 fi
 
 # 5. Check and configure mpv.conf (Critical for disabling stock controller)
@@ -119,6 +160,14 @@ fi
 if ! grep -q "^osd-bar=no" "$MPV_CONF" && ! grep -q "^osd-bar = no" "$MPV_CONF"; then
     echo "Adding 'osd-bar=no' to $MPV_CONF..."
     echo "osd-bar=no" >> "$MPV_CONF"
+fi
+
+if ! grep -q "^osd-font=" "$MPV_CONF" && ! grep -q '^osd-font[[:space:]]*=' "$MPV_CONF"; then
+    echo 'osd-font="Inter"' >> "$MPV_CONF"
+fi
+
+if ! grep -q "^audio-fallback-to-null=" "$MPV_CONF" && ! grep -q '^audio-fallback-to-null[[:space:]]*=' "$MPV_CONF"; then
+    echo "audio-fallback-to-null=yes" >> "$MPV_CONF"
 fi
 
 # 6. Check and configure input.conf (for LuminaX glass menu keybindings)

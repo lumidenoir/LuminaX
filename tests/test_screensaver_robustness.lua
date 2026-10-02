@@ -332,6 +332,101 @@ local tv_networks = {
 local tv_studios = ss.filter_and_format_studios({}, tv_networks)
 assert_eq("TV series with empty companies falls back to network", tv_studios, "HBO")
 
+print("\n=== 7. Testing Hash Cache Keys, Unicode Collision Resistance & LRU Pruning ===")
+
+assert_true("hash_djb2 exported", type(ss.hash_djb2) == 'function')
+assert_true("safe_cache_filename exported", type(ss.safe_cache_filename) == 'function')
+assert_true("legacy_cache_filename exported", type(ss.legacy_cache_filename) == 'function')
+assert_true("prune_cache_dir exported", type(ss.prune_cache_dir) == 'function')
+
+-- Test basic hashing
+local h1 = ss.hash_djb2("Breaking Bad")
+assert_eq("hash_djb2 returns 8-character hex string", #h1, 8)
+assert_eq("Deterministic hash across calls", ss.hash_djb2("Breaking Bad"), h1)
+
+-- Test English slug preservation
+local fn_bb = ss.safe_cache_filename("Breaking Bad/1/1/2008")
+assert_true("English title preserves readable slug", fn_bb:find('^Breaking_Bad_1_1_2008_') ~= nil)
+assert_eq("English filename ends with 8-character hex hash", #fn_bb, #('Breaking_Bad_1_1_2008_') + 8)
+
+-- Test Unicode / Non-ASCII collision resistance
+local k_kimi = "君の名は/?/?/2016"
+local k_tenki = "天気の子/?/?/2019"
+local fn_kimi = ss.safe_cache_filename(k_kimi)
+local fn_tenki = ss.safe_cache_filename(k_tenki)
+
+assert_true("Unicode title 1 produces valid filename", #fn_kimi > 8)
+assert_true("Unicode title 2 produces valid filename", #fn_tenki > 8)
+assert_true("Unicode titles produce unique, non-colliding filenames", fn_kimi ~= fn_tenki)
+
+-- Test accent collision resistance (Amélie vs Amelie)
+local k_amelie_acc = "Amélie/?/?/2001"
+local k_amelie_asc = "Amelie/?/?/2001"
+local fn_amelie_acc = ss.safe_cache_filename(k_amelie_acc)
+local fn_amelie_asc = ss.safe_cache_filename(k_amelie_asc)
+assert_true("Accented title produces unique hash vs ASCII variant", fn_amelie_acc ~= fn_amelie_asc)
+
+-- Test nil / empty key failsafes
+assert_eq("Nil key returns safe default", ss.safe_cache_filename(nil), "item_00000000")
+assert_eq("Empty key returns safe default", ss.safe_cache_filename(""), "item_00000000")
+
+-- Test legacy fallback naming
+local leg_bb = ss.legacy_cache_filename("Breaking Bad/1/1/2008")
+assert_eq("Legacy cache filename retains old format", leg_bb, "Breaking_Bad_1_1_2008")
+
+-- Test LRU Pruning with mock readdir & file_info
+local mock_files = {
+    "logo_100_t1.bgra",
+    "logo_100_t2.bgra",
+    "logo_200_t1.bgra",
+    "logo_200_t2.bgra",
+}
+local mock_sizes = {
+    ["logo_100_t1.bgra"] = 50 * 1024 * 1024, -- 50 MB, older
+    ["logo_100_t2.bgra"] = 50 * 1024 * 1024, -- 50 MB, older
+    ["logo_200_t1.bgra"] = 60 * 1024 * 1024, -- 60 MB, newer
+    ["logo_200_t2.bgra"] = 60 * 1024 * 1024, -- 60 MB, newer
+}
+local mock_mtimes = {
+    ["logo_100_t1.bgra"] = 1000,
+    ["logo_100_t2.bgra"] = 1010,
+    ["logo_200_t1.bgra"] = 2000,
+    ["logo_200_t2.bgra"] = 2010,
+}
+local removed_files = {}
+
+local orig_readdir = package.loaded['mp.utils'].readdir
+local orig_file_info = package.loaded['mp.utils'].file_info
+local orig_os_remove = os.remove
+
+package.loaded['mp.utils'].readdir = function(dir, filter)
+    return mock_files
+end
+package.loaded['mp.utils'].file_info = function(path)
+    local fn = path:match('([^/]+)$')
+    if mock_sizes[fn] then
+        return { size = mock_sizes[fn], mtime = mock_mtimes[fn] }
+    end
+    return nil
+end
+os.remove = function(path)
+    local fn = path:match('([^/]+)$')
+    removed_files[fn] = true
+    return true
+end
+
+-- Total = 220 MB. Threshold = 150 MB. Target = 75% of 150 = 112.5 MB.
+-- Oldest files (logo_100_t1: 50MB, logo_100_t2: 50MB) must be pruned first!
+local pruned = ss.prune_cache_dir(150)
+assert_true("LRU prune deleted oldest files when limit exceeded", pruned >= 2)
+assert_true("Oldest file logo_100_t1 was removed", removed_files["logo_100_t1.bgra"] == true)
+assert_true("Oldest file logo_100_t2 was removed", removed_files["logo_100_t2.bgra"] == true)
+assert_true("Newer file logo_200_t2 was retained", removed_files["logo_200_t2.bgra"] == nil)
+
+-- Restore mocks
+package.loaded['mp.utils'].readdir = orig_readdir
+package.loaded['mp.utils'].file_info = orig_file_info
+os.remove = orig_os_remove
 
 print(string.format("\n========================================================"))
 print(string.format("Screensaver Robustness Suite: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))

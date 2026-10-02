@@ -13,6 +13,7 @@ end
 package.path = script_dir .. '/?.lua;' .. script_dir .. '/modules/?.lua;' .. package.path
 
 -- Load Subsystems
+local version     = require('version')
 local utils       = require('modules.utils')
 local osc         = require('modules.osc')
 local huds        = require('modules.huds')
@@ -20,6 +21,7 @@ local tag_editor  = require('modules.tag_editor')
 local menu        = require('modules.menu')
 local screensaver = require('modules.screensaver')
 local subtitle    = require('modules.subtitle')
+local updater     = require('modules.updater')
 
 -- Cross-Module Wireup
 local user_opts   = osc.get_user_opts()
@@ -130,7 +132,52 @@ osc.init({
     utils       = utils,
 })
 
--- 6. Register Script Keybindings & Bindings
+-- 7. Initialize Updater
+updater.init({
+    user_opts    = user_opts,
+    state        = state,
+    request_tick = osc.request_tick,
+    request_init = osc.request_init,
+    huds         = huds,
+})
+
+mp.register_script_message('update-check', function()
+    updater.check_for_updates(function(avail, new_ver)
+        if huds and huds.show_pill then
+            if avail then
+                huds.show_pill({ icon = '✨', key = 'LUMINAX UPDATE', val = 'v' .. new_ver .. ' Available (Click bar icon)', val_color = '60E0FF' })
+            else
+                huds.show_pill({ icon = '✓', key = 'LUMINAX UPDATE', val = 'Up to date (v' .. version.VERSION .. ')', val_color = '72D572' })
+            end
+        else
+            if avail then
+                mp.osd_message(string.format('✨ LuminaX update available: v%s (Current: v%s)', new_ver, version.VERSION), 4)
+            else
+                mp.osd_message(string.format('LuminaX is up to date (v%s)', version.VERSION), 3)
+            end
+        end
+    end, true)
+end)
+
+mp.register_script_message('update-run', function()
+    updater.perform_update()
+end)
+
+mp.register_script_message('mock-update-available', function(ver)
+    local v = (ver and ver ~= '') and ver or '1.2.0'
+    state.update_available = {
+        version = v,
+        url     = 'https://github.com/lumidenoir/LuminaX/releases/tag/v' .. v,
+        name    = 'Release v' .. v,
+    }
+    if huds and huds.show_pill then
+        huds.show_pill({ icon = '✨', key = 'LUMINA UPDATE', val = 'v' .. v .. ' Available (Click bar icon)', val_color = '60E0FF' })
+    end
+    if osc.request_init then osc.request_init() end
+    osc.request_tick()
+end)
+
+-- 8. Register Script Keybindings & Bindings
 mp.add_key_binding(nil, 'menu-playlist', function()
     if menu.is_active() and state.menu_active == 'playlist' then
         menu.menu_close()

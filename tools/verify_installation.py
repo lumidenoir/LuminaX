@@ -97,6 +97,7 @@ def main():
         os.path.join("scripts", "autoload.lua"),
         os.path.join("scripts", "thumbfast.lua"),
         os.path.join("scripts", "LuminaX", "main.lua"),
+        os.path.join("scripts", "LuminaX", "version.lua"),
         os.path.join("scripts", "LuminaX", "modules", "utils.lua"),
         os.path.join("scripts", "LuminaX", "modules", "osc.lua"),
         os.path.join("scripts", "LuminaX", "modules", "huds.lua"),
@@ -104,6 +105,7 @@ def main():
         os.path.join("scripts", "LuminaX", "modules", "screensaver.lua"),
         os.path.join("scripts", "LuminaX", "modules", "tag_editor.lua"),
         os.path.join("scripts", "LuminaX", "modules", "subtitle.lua"),
+        os.path.join("scripts", "LuminaX", "modules", "updater.lua"),
     ]
 
     all_scripts_ok = True
@@ -137,11 +139,15 @@ def main():
     print("\n[4/5] Checking Configuration & Dual-Controller Conflict...")
     mpv_conf_p = os.path.join(mpv_dir, "mpv.conf")
     osc_conf_p = os.path.join(mpv_dir, "script-opts", "osc.conf")
+    stats_conf_p = os.path.join(mpv_dir, "script-opts", "stats.conf")
 
     if os.path.exists(osc_conf_p):
         print(f"  ✓ {os.path.relpath(osc_conf_p, mpv_dir)} Found")
     else:
         print(f"  ⚠ {os.path.relpath(osc_conf_p, mpv_dir)} Not found (Defaults will be used)")
+
+    if os.path.exists(stats_conf_p):
+        print(f"  ✓ {os.path.relpath(stats_conf_p, mpv_dir)} Found (visionOS styling active)")
 
     mpv_conf_ok = False
     if os.path.exists(mpv_conf_p):

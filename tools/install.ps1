@@ -419,6 +419,31 @@ if ($RegisterUserFonts) {
     }
 }
 
+# Deploy Updater & Diagnostics
+$destTools = Join-Path $resolvedTargetDir "tools"
+New-Item -ItemType Directory -Path $destTools -Force | Out-Null
+$toolsSource = Join-Path $PackageRoot "tools"
+if (Test-Path $toolsSource) {
+    Copy-Item -Path "$toolsSource\*" -Destination $destTools -Recurse -Force
+}
+foreach ($rootTool in @("update.bat", "update.ps1", "verify_installation.py")) {
+    $p = Join-Path $PackageRoot $rootTool
+    if (Test-Path $p) {
+        Copy-Item -Path $p -Destination (Join-Path $destTools $rootTool) -Force
+    }
+}
+
+$rootUpdateBat = Join-Path $resolvedTargetDir "update.bat"
+$batCode = @"
+@echo off
+rem LuminaX 1-Click Desktop & Portable Updater
+setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & '%~dp0tools\update.ps1' -TargetDir '%~dp0' %* }"
+pause
+"@
+[System.IO.File]::WriteAllText($rootUpdateBat, $batCode, (New-Object System.Text.UTF8Encoding($false)))
+Write-Success "Installed updater tools and 1-click update.bat"
+
 # -----------------------------------------------------------------------------
 # 5. Configure mpv.conf, input.conf, and osc.conf
 # -----------------------------------------------------------------------------
@@ -473,6 +498,23 @@ $statsConfDest = Join-Path $resolvedTargetDir "script-opts\stats.conf"
 if ($srcStatsConf -and (-not (Test-Path $statsConfDest))) {
     Copy-Item -Path $srcStatsConf -Destination $statsConfDest -Force
     Write-Success "Created script-opts\stats.conf"
+}
+
+# Optional: script-opts/lumina_subtitle.json
+$srcSubJson = Join-Path $PackageRoot "script-opts\lumina_subtitle.json"
+$destSubJson = Join-Path $resolvedTargetDir "script-opts\lumina_subtitle.json"
+if ((Test-Path $srcSubJson) -and (-not (Test-Path $destSubJson))) {
+    Copy-Item -Path $srcSubJson -Destination $destSubJson -Force
+    Write-Success "Created script-opts\lumina_subtitle.json"
+}
+
+# Reference definitions
+foreach ($defConf in @("osc.def.conf", "stats.def.conf")) {
+    $srcDef = Join-Path $PackageRoot "script-opts\$defConf"
+    $destDef = Join-Path $resolvedTargetDir "script-opts\$defConf"
+    if (Test-Path $srcDef) {
+        Copy-Item -Path $srcDef -Destination $destDef -Force
+    }
 }
 
 # 5.2 mpv.conf (Disable default mpv OSC to prevent dual-controller collision)
@@ -579,6 +621,7 @@ $verifyFiles = @(
     "scripts\autoload.lua",
     "scripts\thumbfast.lua",
     "scripts\LuminaX\main.lua",
+    "scripts\LuminaX\version.lua",
     "scripts\LuminaX\modules\utils.lua",
     "scripts\LuminaX\modules\osc.lua",
     "scripts\LuminaX\modules\huds.lua",
@@ -586,9 +629,11 @@ $verifyFiles = @(
     "scripts\LuminaX\modules\screensaver.lua",
     "scripts\LuminaX\modules\tag_editor.lua",
     "scripts\LuminaX\modules\subtitle.lua",
+    "scripts\LuminaX\modules\updater.lua",
     "fonts\Inter-Regular.ttf",
     "fonts\uosc_icons.otf",
     "script-opts\osc.conf",
+    "script-opts\stats.conf",
     "mpv.conf"
 )
 

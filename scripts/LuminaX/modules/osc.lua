@@ -103,6 +103,9 @@ local user_opts = {
     screensaver_align = 'center', -- screensaver alignment: 'center' (Apple TV cinema centered), 'split' (symmetrical 2-column), 'left'
     logo_engine = 'auto',       -- logo processing engine: 'auto' (python -> ffmpeg fallback), 'ffmpeg' (pure native ffmpeg, zero python)
     tmdb_cache_lookup = true,   -- whether to use disk/memory cache for tmdb data and logos
+    screensaver_anti_burnin = false, -- anti-burn-in micro-drift on pause
+    check_updates = true,       -- auto check for LuminaX updates in background
+    check_update_interval_days = 3, -- check frequency in days
 }
 
 -- Icons for jump button depending on jumpamount (Material Icons Round)
@@ -131,6 +134,7 @@ local icons = {
   playlist = '\238\129\159',     -- playlist_play
   chapters = '\238\137\130',     -- format_list_bulleted
   tags = '\238\149\142',         -- local_offer / tag
+  update = '\238\164\163',       -- Material Icons Round: update (0xE923: circular arrow with clock hands)
   pip = '\238\164\145',          -- picture_in_picture_alt
 }
 
@@ -342,6 +346,7 @@ function build_keyboard_controls()
     table.insert(bottom_button_line, 'tog_chapters')
     table.insert(bottom_button_line, 'tog_speed')
     table.insert(bottom_button_line, 'tog_tags')
+    table.insert(bottom_button_line, 'tog_update')
     table.insert(bottom_button_line, 'tog_info')
     table.insert(bottom_button_line, 'tog_fs')
 
@@ -655,7 +660,7 @@ end
 local function render_media_badges(elem_ass, elem_geo, alpha)
     local u = ctx_ref and ctx_ref.utils
     if not u or not u.collect_media_badges or not u.draw_badges_ltr then return end
-    local badges = u.collect_media_badges()
+    local badges = u.collect_media_badges(state)
     if #badges == 0 then return end
     local badge_h = 16
     local cy      = elem_geo.y + badge_h / 2  -- vertically centred on this row
@@ -1618,33 +1623,52 @@ local UI_OFFSET_Y = 0
     local fs_speed      = math.floor(13 * scale + 0.5)
     local style_speed   = string.format('{\\blur0\\bord0\\1c&HC7C7CC&\\3c&H161618&\\fs%d\\fn%s\\b700}', fs_speed, user_opts.font)
 
+    local btn_idx = 0
     lo = add_layout('tog_fs')
-    lo.geometry = {x = right_pad, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
+    lo.geometry = {x = right_pad - right_spacing * btn_idx, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
     elements['tog_fs'].visible = (osc_param.playresx >= 500)
+    btn_idx = btn_idx + 1
 
     lo = add_layout('tog_info')
-    lo.geometry = {x = right_pad - right_spacing, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
+    lo.geometry = {x = right_pad - right_spacing * btn_idx, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
     elements['tog_info'].visible = (osc_param.playresx >= 540)
+    btn_idx = btn_idx + 1
+
+    local show_update_btn = (state.update_available ~= nil)
+    lo = add_layout('tog_update')
+    if show_update_btn then
+        lo.geometry = {x = right_pad - right_spacing * btn_idx, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
+        lo.style = style_ctrl3
+        elements['tog_update'].visible = true
+        btn_idx = btn_idx + 1
+    else
+        lo.geometry = {x = 0, y = 0, an = 5, w = 0, h = 0}
+        lo.style = style_ctrl3
+        elements['tog_update'].visible = false
+    end
 
     lo = add_layout('tog_tags')
-    lo.geometry = {x = right_pad - right_spacing * 2, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
+    lo.geometry = {x = right_pad - right_spacing * btn_idx, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
     elements['tog_tags'].visible = (osc_param.playresx >= 660)
+    btn_idx = btn_idx + 1
 
     lo = add_layout('tog_speed')
-    lo.geometry = {x = right_pad - right_spacing * 3, y = refY - 40 + UI_OFFSET_Y, an = 5, w = math.floor(34 * scale + 0.5), h = ctrl3_h}
+    lo.geometry = {x = right_pad - right_spacing * btn_idx, y = refY - 40 + UI_OFFSET_Y, an = 5, w = math.floor(34 * scale + 0.5), h = ctrl3_h}
     lo.style = style_speed
     elements['tog_speed'].visible = (osc_param.playresx >= 720)
+    btn_idx = btn_idx + 1
 
     lo = add_layout('tog_chapters')
-    lo.geometry = {x = right_pad - right_spacing * 4, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
+    lo.geometry = {x = right_pad - right_spacing * btn_idx, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
     elements['tog_chapters'].visible = (osc_param.playresx >= 580)
+    btn_idx = btn_idx + 1
 
     lo = add_layout('tog_playlist')
-    lo.geometry = {x = right_pad - right_spacing * 5, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
+    lo.geometry = {x = right_pad - right_spacing * btn_idx, y = refY - 40 + UI_OFFSET_Y, an = 5, w = ctrl3_w, h = ctrl3_h}
     lo.style = style_ctrl3
     elements['tog_playlist'].visible = (osc_param.playresx >= 620)
 
@@ -2128,6 +2152,35 @@ function osc_init()
     ne.tooltipF = 'Media Information & Stats (I)'
     ne.eventresponder['mbtn_left_up'] =
         function () mp.commandv('script-binding', 'stats/display-stats-toggle') end
+
+    -- tog_update (Only visible & active when an update is available)
+    ne = new_element('tog_update', 'button')
+    ne.content = function ()
+        if state.update_available then
+            return '{\\1c&H60E0FF&}' .. (icons.update or '\238\164\163') .. '{\\r}'
+        else
+            return ''
+        end
+    end
+    ne.visible = (state.update_available ~= nil)
+    ne.tooltip_style = osc_styles.Tooltip
+    ne.tooltipF = function ()
+        if state.update_available then
+            return string.format('✨ LuminaX Update: v%s (Click to install now)', state.update_available.version or '')
+        else
+            return ''
+        end
+    end
+    ne.eventresponder['mbtn_left_up'] = function ()
+        if state.update_available then
+            mp.commandv('script-message', 'update-run')
+        end
+    end
+    ne.eventresponder['mbtn_right_up'] = function ()
+        if state.update_available then
+            mp.commandv('script-message', 'update-run')
+        end
+    end
 
     -- tog_tags
     ne = new_element('tog_tags', 'button')
@@ -2696,6 +2749,13 @@ function render()
 
         state.mp_screen_sizeX = current_screen_sizeX
         state.mp_screen_sizeY = current_screen_sizeY
+    end
+
+    -- auto-reinit layout when update state changes (e.g. update becomes available or completes)
+    local has_update = (state.update_available ~= nil)
+    if state.last_update_state ~= has_update then
+        state.last_update_state = has_update
+        request_init_resize()
     end
 
     -- init management
@@ -3631,6 +3691,10 @@ end
 
 function M.request_tick()
     request_tick()
+end
+
+function M.request_init()
+    request_init_resize()
 end
 
 return M

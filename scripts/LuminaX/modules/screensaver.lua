@@ -995,7 +995,23 @@ local function ensure_cache_dir()
     return tmdb_disk_cache_dir
 end
 
+local function hash_djb2(str)
+    if not str then return '00000000' end
+    local h = 5381
+    for i = 1, #str do
+        h = ((h * 33) + str:byte(i)) % 4294967296
+    end
+    return string.format('%08x', h)
+end
+
 local function safe_cache_filename(key)
+    if not key or key == '' then return 'item_00000000' end
+    local slug = key:gsub('[^%w%-_]', '_'):gsub('_+', '_'):gsub('^_', ''):gsub('_$', ''):sub(1, 32)
+    if slug == '' then slug = 'item' end
+    return string.format('%s_%s', slug, hash_djb2(key))
+end
+
+local function legacy_cache_filename(key)
     return (key:gsub('[^%w%-_]', '_'))
 end
 
@@ -1005,6 +1021,9 @@ local function purge_meta_from_disk(key)
         local cdir = ensure_cache_dir()
         local path = string.format('%s/meta_%s.json', cdir, safe_cache_filename(key))
         os.remove(path)
+        -- Also clean legacy filename if present
+        local legacy_path = string.format('%s/meta_%s.json', cdir, legacy_cache_filename(key))
+        os.remove(legacy_path)
     end)
 end
 
@@ -1024,17 +1043,65 @@ local function purge_logo_from_disk(show_id)
     end)
 end
 
-local CURRENT_META_VERSION = 3
+local function prune_cache_dir(max_mb)
+    max_mb = tonumber(max_mb) or 250
+    if max_mb <= 0 then return 0 end
+    local max_bytes = max_mb * 1024 * 1024
+
+    local cdir = ensure_cache_dir()
+    local files = utils.readdir(cdir, 'files')
+    if not files or #files == 0 then return 0 end
+
+    local total_bytes = 0
+    local file_records = {}
+
+    for _, fn in ipairs(files) do
+        local full_path = cdir .. '/' .. fn
+        local info = utils.file_info(full_path)
+        if info and info.size then
+            total_bytes = total_bytes + info.size
+            table.insert(file_records, {
+                path = full_path,
+                size = info.size,
+                mtime = info.mtime or 0,
+            })
+        end
+    end
+
+    if total_bytes <= max_bytes then return 0 end
+
+    -- Sort oldest mtime first for LRU eviction
+    table.sort(file_records, function(a, b)
+        return a.mtime < b.mtime
+    end)
+
+    local pruned_count = 0
+    local target_bytes = math.floor(max_bytes * 0.75)
+    for _, rec in ipairs(file_records) do
+        if total_bytes <= target_bytes then break end
+        if os.remove(rec.path) then
+            pruned_count = pruned_count + 1
+            total_bytes = total_bytes - rec.size
+        end
+    end
+    return pruned_count
+end
+
+local CURRENT_META_VERSION = 4
 
 local function save_meta_to_disk(key, data)
     pcall(function()
         local cdir = ensure_cache_dir()
         local path = string.format('%s/meta_%s.json', cdir, safe_cache_filename(key))
-        local f = io.open(path, 'w')
+        local tmp_path = path .. '.tmp'
+        local f = io.open(tmp_path, 'w')
         if f then
             data.meta_v = CURRENT_META_VERSION
+            data.cached_at = os.time()
             f:write(utils.format_json(data))
             f:close()
+            os.remove(path)
+            os.rename(tmp_path, path)
         end
     end)
 end
@@ -1044,6 +1111,11 @@ local function load_meta_from_disk(key)
         local cdir = ensure_cache_dir()
         local path = string.format('%s/meta_%s.json', cdir, safe_cache_filename(key))
         local f = io.open(path, 'r')
+        if not f then
+            -- Fallback to legacy naming for seamless backward compatibility
+            local legacy_path = string.format('%s/meta_%s.json', cdir, legacy_cache_filename(key))
+            f = io.open(legacy_path, 'r')
+        end
         if not f then return nil end
         local content = f:read('*a')
         f:close()
@@ -1309,9 +1381,17 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
             name = 'subprocess',
             args = {'curl', '-s', '-4', '--connect-timeout', '3', '--retry', '3', '--retry-all-errors', '--max-time', '10', dl_url, '-o', png_tmp},
         }, function(ok_dl, res_dl)
-            if not ok_dl or not res_dl or (res_dl.status and res_dl.status ~= 0) then cb(nil); return end
+            if not ok_dl or not res_dl or (res_dl.status and res_dl.status ~= 0) then
+                pcall(os.remove, png_tmp)
+                cb(nil)
+                return
+            end
             local finfo = utils.file_info(png_tmp)
-            if not finfo or not finfo.size or finfo.size <= 0 then cb(nil); return end
+            if not finfo or not finfo.size or finfo.size <= 0 then
+                pcall(os.remove, png_tmp)
+                cb(nil)
+                return
+            end
         local chosen_logo = candidates[1]
         local chosen_w = (chosen_logo and chosen_logo.width and chosen_logo.width > 0) and chosen_logo.width or 600
         local chosen_h = (chosen_logo and chosen_logo.height and chosen_logo.height > 0) and chosen_logo.height or 150
@@ -1371,6 +1451,7 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
                         '-map', '[o3]', '-f', 'rawvideo', t3_bgra,
                     },
                 }, function(ok_ff, _)
+                    pcall(os.remove, img_path) -- Clean up intermediate downloaded PNG immediately
                     if ok_ff and utils.file_info(t1_bgra) and utils.file_info(t2_bgra) and utils.file_info(t3_bgra) then
                         cb_ff({
                             [1] = {path = t1_bgra, w = t1_w, h = t1_h},
@@ -1495,10 +1576,20 @@ local function fetch_tmdb_data(force_refresh)
                     end
                 end)
             end
-            if disk_cached.show_id and ((disk_cached.meta_v or 0) < CURRENT_META_VERSION or disk_cached.studio == nil or disk_cached.studio == '' or disk_cached.cast == nil) and not disk_cached.meta_upgraded then
+            local now = os.time()
+            local cached_at = tonumber(disk_cached.cached_at) or 0
+            local is_partial = (
+                disk_cached.overview == nil or disk_cached.overview == '' or
+                disk_cached.overview:lower():find('^tba') ~= nil or
+                disk_cached.rating == nil or disk_cached.rating == ''
+            )
+            local max_age = is_partial and 86400 or (30 * 86400)
+            local is_expired = (cached_at > 0 and (now - cached_at > max_age))
+
+            if disk_cached.show_id and (((disk_cached.meta_v or 0) < CURRENT_META_VERSION or disk_cached.studio == nil or disk_cached.studio == '' or disk_cached.cast == nil or is_expired) and not disk_cached.meta_upgraded) then
                 disk_cached.meta_upgraded = true
                 purge_meta_from_disk(cache_key)
-                if disk_cached.show_id then
+                if (disk_cached.meta_v or 0) < CURRENT_META_VERSION and disk_cached.show_id then
                     purge_logo_from_disk(disk_cached.show_id)
                 end
                 fetch_tmdb_data(true)
@@ -1968,6 +2059,12 @@ function M.init(ctx)
     request_tick      = ctx.request_tick or function() end
     utils_mod         = ctx.utils
     is_menu_active_fn = ctx.is_menu_active
+
+    if mp and mp.add_timeout then
+        mp.add_timeout(10, function()
+            prune_cache_dir(user_opts.tmdb_cache_max_mb or 250)
+        end)
+    end
 end
 
 function M.is_active()
@@ -2051,5 +2148,9 @@ function M.fetch_candidates(query, callback)
 end
 
 M.filter_and_format_studios = filter_and_format_studios
+M.hash_djb2                 = hash_djb2
+M.safe_cache_filename       = safe_cache_filename
+M.legacy_cache_filename     = legacy_cache_filename
+M.prune_cache_dir           = prune_cache_dir
 
 return M

@@ -1,0 +1,49 @@
+name: Build & Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish LuminaX Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1 mpv ffmpeg
+
+      - name: Run Test Suite (505 Assertions)
+        run: python3 tests/run_all_tests.py
+
+      - name: Build Distribution Packages & Changelog
+        run: python3 tools/package_dist.py
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: dist/release_body.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/luminaX-linux.tar.gz
+            dist/luminaX-macos.tar.gz
+            dist/luminaX-windows.zip
+            dist/checksums.txt
