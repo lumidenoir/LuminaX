@@ -12,23 +12,23 @@ permissions:
 jobs:
   release:
     name: Build & Publish LuminaX Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.1 mpv ffmpeg xvfb
+          sudo apt-get install -y lua5.1 mpv ffmpeg
 
       - name: Run Test Suite
         run: python3 tests/run_all_tests.py
@@ -37,7 +37,7 @@ jobs:
         run: python3 tools/package_dist.py
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: dist/release_body.md
           prerelease: ${{ contains(github.ref_name, '-') }}

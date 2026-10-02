@@ -4,7 +4,7 @@
 -- ============================================================================
 
 local Version = {
-    VERSION            = '1.1.0',
+    VERSION            = '1.0.1-alpha2',
     RELEASE_NAME       = 'LuminaX VisionOS Glass & Subtitle Suite',
     RELEASE_DATE       = '2026-10-02',
     GITHUB_REPO        = 'lumidenoir/LuminaX',
