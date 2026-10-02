@@ -514,11 +514,17 @@ local function render_screensaver(alpha)
                 ass:pos(margin_x, cur_y)
                 ass:an(7)
             end
+            local is_tv = (season_ep ~= '' or ep_title ~= '' or (td and (td.seasons_count ~= nil or td.episodes_count ~= nil)))
+            local is_movie = not is_tv
+            local title_font = is_movie and (user_opts.screensaver_film_font or 'NewYork') or 'Inter'
+            local title_weight = is_movie and 600 or 700
+            local title_fs = is_movie and math.floor(show_fs * (tier == 3 and 1.35 or 1.25)) or show_fs
+            local track_tag = is_movie and '\\fsp1' or ''
             ass:append(string.format(
-                '{\\fnInter\\b700\\fs%d\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
-                show_fs, a_hex))
+                '{\\fn%s\\b%d\\fs%d%s\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
+                title_font, title_weight, title_fs, track_tag, a_hex))
             ass:append(utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(show_name) or show_name)
-            cur_y = cur_y + math.floor(show_fs * 1.35) + 6
+            cur_y = cur_y + math.floor(title_fs * 1.35) + 6
         end
     else
         ss_remove_logo()
@@ -530,11 +536,17 @@ local function render_screensaver(alpha)
             ass:pos(margin_x, cur_y)
             ass:an(7)
         end
+        local is_tv = (season_ep ~= '' or ep_title ~= '' or (td and (td.seasons_count ~= nil or td.episodes_count ~= nil)))
+        local is_movie = not is_tv
+        local title_font = is_movie and (user_opts.screensaver_film_font or 'NewYork') or 'Inter'
+        local title_weight = is_movie and 600 or 700
+        local title_fs = is_movie and math.floor(show_fs * (tier == 3 and 1.35 or 1.25)) or show_fs
+        local track_tag = is_movie and '\\fsp1' or ''
         ass:append(string.format(
-            '{\\fnInter\\b700\\fs%d\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
-            show_fs, a_hex))
+            '{\\fn%s\\b%d\\fs%d%s\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
+            title_font, title_weight, title_fs, track_tag, a_hex))
         ass:append(utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(show_name) or show_name)
-        cur_y = cur_y + math.floor(show_fs * 1.35) + 6
+        cur_y = cur_y + math.floor(title_fs * 1.35) + 6
     end
 
     -- 4. Episode Title (TV) or Tagline (Movie)
@@ -1265,23 +1277,36 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
             local c = f_dims:read('*a')
             f_dims:close()
             local d = utils.parse_json(c)
-            if d and d.t1 and d.t2 and d.t3 then
-                local t1_bgra = string.format('%s/logo_%d_t1_%dx%d.bgra', cdir, show_id, d.t1[1], d.t1[2])
-                local t2_bgra = string.format('%s/logo_%d_t2_%dx%d.bgra', cdir, show_id, d.t2[1], d.t2[2])
-                local t3_bgra = string.format('%s/logo_%d_t3_%dx%d.bgra', cdir, show_id, d.t3[1], d.t3[2])
-                local f1 = utils.file_info(t1_bgra)
-                local f2 = utils.file_info(t2_bgra)
-                local f3 = utils.file_info(t3_bgra)
-                if f1 and f1.size == (d.t1[1] * d.t1[2] * 4) and
-                   f2 and f2.size == (d.t2[1] * d.t2[2] * 4) and
-                   f3 and f3.size == (d.t3[1] * d.t3[2] * 4) then
-                    local is_bd = (d.is_backdrop == true)
-                    cb({
-                        [1] = {path = t1_bgra, w = d.t1[1], h = d.t1[2]},
-                        [2] = {path = t2_bgra, w = d.t2[1], h = d.t2[2]},
-                        [3] = {path = t3_bgra, w = d.t3[1], h = d.t3[2]},
-                    }, is_bd)
+            if d and d.no_logo == true then
+                local ts = tonumber(d.timestamp) or 0
+                if (os.time() - ts) < (86400 * 7) then
+                    cb(nil)
                     return
+                end
+            end
+            if d and d.t1 and d.t2 and d.t3 then
+                if d.is_backdrop == true then
+                    pcall(os.remove, dims_file)
+                    if d.t1 then pcall(os.remove, string.format('%s/logo_%d_t1_%dx%d.bgra', cdir, show_id, d.t1[1], d.t1[2])) end
+                    if d.t2 then pcall(os.remove, string.format('%s/logo_%d_t2_%dx%d.bgra', cdir, show_id, d.t2[1], d.t2[2])) end
+                    if d.t3 then pcall(os.remove, string.format('%s/logo_%d_t3_%dx%d.bgra', cdir, show_id, d.t3[1], d.t3[2])) end
+                else
+                    local t1_bgra = string.format('%s/logo_%d_t1_%dx%d.bgra', cdir, show_id, d.t1[1], d.t1[2])
+                    local t2_bgra = string.format('%s/logo_%d_t2_%dx%d.bgra', cdir, show_id, d.t2[1], d.t2[2])
+                    local t3_bgra = string.format('%s/logo_%d_t3_%dx%d.bgra', cdir, show_id, d.t3[1], d.t3[2])
+                    local f1 = utils.file_info(t1_bgra)
+                    local f2 = utils.file_info(t2_bgra)
+                    local f3 = utils.file_info(t3_bgra)
+                    if f1 and f1.size == (d.t1[1] * d.t1[2] * 4) and
+                       f2 and f2.size == (d.t2[1] * d.t2[2] * 4) and
+                       f3 and f3.size == (d.t3[1] * d.t3[2] * 4) then
+                        cb({
+                            [1] = {path = t1_bgra, w = d.t1[1], h = d.t1[2]},
+                            [2] = {path = t2_bgra, w = d.t2[1], h = d.t2[2]},
+                            [3] = {path = t3_bgra, w = d.t3[1], h = d.t3[2]},
+                        }, false)
+                        return
+                    end
                 end
             end
         end
@@ -1290,6 +1315,10 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
     local lang_param = 'en,null,ja,ko,zh,fr,de,es,it'
     if orig_lang and orig_lang ~= '' and not lang_param:find(orig_lang, 1, true) then
         lang_param = lang_param .. ',' .. orig_lang
+    end
+    local pref_l = user_opts.screensaver_logo_lang
+    if pref_l and pref_l ~= '' and pref_l ~= 'auto' and pref_l ~= 'original' and not lang_param:find(pref_l, 1, true) then
+        lang_param = lang_param .. ',' .. pref_l
     end
 
     local images_url = string.format(
@@ -1328,15 +1357,30 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
         if #candidates > 0 then
             local pref_lang = user_opts.screensaver_logo_lang or 'auto'
             table.sort(candidates, function(a, b)
-                if pref_lang == 'original' and orig_lang and orig_lang ~= '' then
-                    local a_orig = (a.iso_639_1 == orig_lang)
-                    local b_orig = (b.iso_639_1 == orig_lang)
-                    if a_orig ~= b_orig then return a_orig end
-                else
-                    local a_en = (a.iso_639_1 == 'en')
-                    local b_en = (b.iso_639_1 == 'en')
-                    if a_en ~= b_en then return a_en end
+                local function lang_priority(item)
+                    local l = item.iso_639_1
+                    if pref_lang == 'original' then
+                        if orig_lang and l == orig_lang then return 1 end
+                        if l == 'en' then return 2 end
+                        if not l or l == '' or l == 'null' then return 3 end
+                        return 4
+                    elseif pref_lang ~= 'auto' and pref_lang ~= '' then
+                        if l == pref_lang then return 1 end
+                        if l == 'en' then return 2 end
+                        if orig_lang and l == orig_lang then return 3 end
+                        if not l or l == '' or l == 'null' then return 4 end
+                        return 5
+                    else -- 'auto'
+                        if l == 'en' then return 1 end
+                        if orig_lang and l == orig_lang then return 2 end
+                        if not l or l == '' or l == 'null' then return 3 end
+                        return 4
+                    end
                 end
+
+                local prio_a = lang_priority(a)
+                local prio_b = lang_priority(b)
+                if prio_a ~= prio_b then return prio_a < prio_b end
 
                 local ar_a = a.aspect_ratio or (a.width and a.height and a.height > 0 and (a.width / a.height)) or 0
                 local ar_b = b.aspect_ratio or (b.width and b.height and b.height > 0 and (b.width / b.height)) or 0
@@ -1355,17 +1399,14 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
                 return ar_a > ar_b
             end)
         else
-            -- Rich Fallback: When movie has no transparent logo on TMDB, use high-resolution backdrop or poster!
-            if img_data.backdrops and #img_data.backdrops > 0 then
-                is_backdrop = true
-                candidates = img_data.backdrops
-            elseif img_data.posters and #img_data.posters > 0 then
-                is_backdrop = true
-                candidates = img_data.posters
-            else
-                cb(nil)
-                return
+            -- No transparent logo found on TMDB; record negative cache and return nil so screensaver cleanly renders styled text title
+            local f_d = io.open(dims_file, 'w')
+            if f_d then
+                f_d:write(utils.format_json({ no_logo = true, timestamp = os.time() }))
+                f_d:close()
             end
+            cb(nil)
+            return
         end
 
         local chosen_path = candidates[1] and candidates[1].file_path
@@ -1556,6 +1597,12 @@ local function fetch_tmdb_data(force_refresh)
 
         local disk_cached = load_meta_from_disk(cache_key)
         if disk_cached then
+            if disk_cached.is_backdrop then
+                disk_cached.bgra_path = nil
+                disk_cached.logos = nil
+                disk_cached.is_backdrop = nil
+                disk_cached.logo_retry = nil
+            end
             tmdb_cache[cache_key] = disk_cached
             tmdb_current = disk_cached
             if ss_active then render_screensaver(ss_alpha) end
@@ -1573,6 +1620,9 @@ local function fetch_tmdb_data(force_refresh)
                         disk_cached.is_backdrop = (is_bd == true)
                         save_meta_to_disk(cache_key, disk_cached)
                         if ss_active then render_screensaver(ss_alpha) end
+                    else
+                        disk_cached.logo_retry = true
+                        save_meta_to_disk(cache_key, disk_cached)
                     end
                 end)
             end

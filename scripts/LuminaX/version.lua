@@ -4,9 +4,9 @@
 -- ============================================================================
 
 local Version = {
-    VERSION            = '1.0.1-alpha2',
-    RELEASE_NAME       = 'LuminaX VisionOS Glass & Subtitle Suite',
-    RELEASE_DATE       = '2026-10-02',
+    VERSION            = '1.2.0',
+    RELEASE_NAME       = 'LuminaX Rounded subs & Native updater',
+    RELEASE_DATE       = '2026-10-03',
     GITHUB_REPO        = 'lumidenoir/LuminaX',
     GITHUB_API_URL     = 'https://api.github.com/repos/lumidenoir/LuminaX/releases/latest',
     CACHE_META_VERSION = 4,

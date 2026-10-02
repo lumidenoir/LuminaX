@@ -39,12 +39,16 @@ LuminaX release archives contain the required scripts, fonts, and configuration 
   *(Or run `./install.sh` from the extracted directory)*
 
 * **Windows:**
-  Right-click `tools\install.bat` and select **Run as administrator** (or run `tools\install.ps1` in PowerShell):
-  ```powershell
-  powershell -ExecutionPolicy Bypass -File tools\install.ps1
-  ```
+  > [!IMPORTANT]
+  > **Only run `install.bat` from the extracted package folder** (where you unzipped `luminaX-windows.zip`). Do **not** run `install.bat` from inside your destination mpv configuration folder.
 
-The installer copies scripts, fonts, and options to your mpv configuration directory, enables required settings in `mpv.conf`, and registers default keybindings.
+  Double-click `install.bat` or right-click `install.bat` and select **Run as administrator** (or launch from PowerShell):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File install.ps1
+  ```
+  *(If using a cloned repository, run `tools\install.bat` or `tools\install.ps1`)*
+
+The installer copies scripts, fonts, and options to your mpv configuration directory, enables required settings in `mpv.conf`, registers default keybindings, and creates a convenient `update.bat` in your real config folder.
 
 ---
 
@@ -175,11 +179,20 @@ LuminaX includes an automated updater that preserves your existing configuration
 
 * **Automatic Check:** Checks GitHub releases once every 3 days in the background. If you are up to date, it remains silent. If a new version is detected, an update button appears on the control bar and a notification pill is shown.
 * **Manual Trigger:** Press `U` at any time to check for updates manually or apply a pending update.
+* **Windows 1-Click Updater (`update.bat`):**
+  > [!IMPORTANT]
+  > **When running `update.bat`, always run it in your real mpv configuration folder** (`%APPDATA%\mpv\` for standard installations, or `mpv\portable_config\` for portable mpv), where LuminaX is installed.
+  >
+  > The installer automatically creates `update.bat` directly inside your real config folder. Do **not** run `update.bat` from inside the extracted release package folder.
 * **Offline / Script Trigger:** Run `tools/update.sh` (Linux/macOS) or `tools/update.ps1` (Windows) directly from your terminal.
 
 ---
 
 ## Frequently Asked Questions & Troubleshooting
+
+### Where should I run `install.bat` vs `update.bat` on Windows?
+* **`install.bat`:** **Only run from the extracted package folder** (where you unzipped `luminaX-windows.zip`). It installs LuminaX into your mpv setup and creates the 1-click `update.bat` in your real config folder.
+* **`update.bat`:** **Only run from your real mpv configuration folder** (`%APPDATA%\mpv\` or `mpv\portable_config\`). It detects your active setup, creates an atomic backup, downloads the latest release, and updates scripts and fonts while preserving your `osc.conf`, custom keybindings, and TMDB key.
 
 ### Two controllers are showing on screen at the same time
 * **Cause:** The default mpv controller is still enabled.

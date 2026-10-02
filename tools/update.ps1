@@ -66,6 +66,78 @@ if ($TargetDir -and (Test-Path $TargetDir)) {
     }
 }
 
+# Safeguard: Verify whether we were launched from an extracted installer package rather than a real mpv config directory
+$isInstallerPackage = $false
+if ($resolvedTargetDir) {
+    $hasInstallerScripts = (Test-Path (Join-Path $resolvedTargetDir "install.ps1")) -or `
+                           (Test-Path (Join-Path $resolvedTargetDir "install.bat")) -or `
+                           (Test-Path (Join-Path $resolvedTargetDir "tools\package_dist.py"))
+    $hasMpvExe = (Test-Path (Join-Path $resolvedTargetDir "mpv.exe")) -or (Test-Path (Join-Path $resolvedTargetDir "..\mpv.exe"))
+    if ($hasInstallerScripts -and -not $hasMpvExe) {
+        $isInstallerPackage = $true
+    }
+}
+
+if ($isInstallerPackage) {
+    Write-WarningMsg "update.bat was run from the extracted LuminaX release package folder."
+    Write-Host "    update.bat should be run from inside your real mpv configuration directory." -ForegroundColor Yellow
+
+    # Search for user's real installed mpv configuration
+    $foundActiveConfig = $null
+    
+    # 1. Running mpv process
+    $proc = Get-Process mpv -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1
+    if ($proc) {
+        $mpvBase = Split-Path -Parent $proc
+        $portable = Join-Path $mpvBase "portable_config"
+        if (Test-Path (Join-Path $portable "scripts\LuminaX")) {
+            $foundActiveConfig = (Resolve-Path $portable).Path
+        }
+    }
+
+    # 2. mpv.exe in PATH
+    if (-not $foundActiveConfig) {
+        $cmd = Get-Command "mpv.exe" -ErrorAction SilentlyContinue
+        if ($cmd -and (Test-Path $cmd.Source)) {
+            $candPort = Join-Path (Split-Path -Parent $cmd.Source) "portable_config"
+            if (Test-Path (Join-Path $candPort "scripts\LuminaX")) {
+                $foundActiveConfig = (Resolve-Path $candPort).Path
+            }
+        }
+    }
+
+    # 3. Standard AppData mpv folder
+    if (-not $foundActiveConfig) {
+        $appDataMpv = Join-Path $env:APPDATA "mpv"
+        if (Test-Path (Join-Path $appDataMpv "scripts\LuminaX")) {
+            $foundActiveConfig = (Resolve-Path $appDataMpv).Path
+        }
+    }
+
+    if ($foundActiveConfig) {
+        Write-Success "Found active LuminaX configuration: $foundActiveConfig"
+        if ($NonInteractive) {
+            $resolvedTargetDir = $foundActiveConfig
+        } else {
+            Write-Host "`n  Would you like to update your active mpv configuration ($foundActiveConfig)? [Y/n]" -ForegroundColor Cyan
+            $ans = Read-Host "  Enter choice (Default: Y)"
+            if ($ans.Trim() -eq "n" -or $ans.Trim() -eq "N") {
+                Write-Host "Update cancelled. Run update.bat directly from inside your mpv configuration directory." -ForegroundColor Yellow
+                exit 1
+            }
+            $resolvedTargetDir = $foundActiveConfig
+        }
+    } else {
+        Write-ErrorMsg "Cannot locate an active installed mpv configuration."
+        Write-Host "`n  [!] Important Notes for Windows:" -ForegroundColor Yellow
+        Write-Host "    - Run 'install.bat' from this extracted package folder to install LuminaX for the first time." -ForegroundColor Cyan
+        Write-Host "    - Run 'update.bat' only from within your real mpv configuration directory (e.g. %APPDATA%\mpv or portable_config)." -ForegroundColor Cyan
+        Write-Host "    - Alternatively, specify -TargetDir 'C:\path\to\your\mpv\config'" -ForegroundColor Cyan
+        if (-not $NonInteractive) { Read-Host "`nPress Enter to exit..." }
+        exit 1
+    }
+}
+
 if (-not $resolvedTargetDir -or -not (Test-Path $resolvedTargetDir)) {
     Write-ErrorMsg "Cannot locate active mpv configuration directory."
     Write-Host "Please run the updater specifying -TargetDir 'C:\path\to\mpv\portable_config' or run from your mpv directory." -ForegroundColor Yellow
@@ -351,16 +423,64 @@ try {
     if (Test-Path "$extractedRoot\verify_installation.py") {
         Copy-Item -Path "$extractedRoot\verify_installation.py" -Destination (Join-Path $destTools "verify_installation.py") -Force -ErrorAction SilentlyContinue
     }
-    Copy-Item -Path $PSCommandPath -Destination (Join-Path $destTools "update.ps1") -Force -ErrorAction SilentlyContinue
+    # Deploy latest updater scripts from extracted archive
+    $newUpdatePs1 = Join-Path $extractedRoot "tools\update.ps1"
+    if (-not (Test-Path $newUpdatePs1)) { $newUpdatePs1 = Join-Path $extractedRoot "update.ps1" }
+    if (Test-Path $newUpdatePs1) {
+        Copy-Item -Path $newUpdatePs1 -Destination (Join-Path $destTools "update.ps1") -Force -ErrorAction SilentlyContinue
+    }
+
+    $newUpdateBat = Join-Path $extractedRoot "tools\update.bat"
+    if (-not (Test-Path $newUpdateBat)) { $newUpdateBat = Join-Path $extractedRoot "update.bat" }
+    if (Test-Path $newUpdateBat) {
+        Copy-Item -Path $newUpdateBat -Destination (Join-Path $destTools "update.bat") -Force -ErrorAction SilentlyContinue
+    }
+
+    # Clean installer and packaging scripts from target config folder
+    foreach ($instScript in @("install.bat", "install.ps1", "package_dist.py")) {
+        $instPath = Join-Path $destTools $instScript
+        if (Test-Path $instPath) {
+            Remove-Item -Path $instPath -Force -ErrorAction SilentlyContinue
+        }
+    }
 
     # Place convenient 1-click update.bat in root of target directory
     $rootUpdateBat = Join-Path $resolvedTargetDir "update.bat"
     $batCode = @"
 @echo off
+rem ==============================================================================
 rem LuminaX 1-Click Desktop & Portable Updater
+rem ==============================================================================
 setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & '%~dp0tools\update.ps1' -TargetDir '%~dp0' %* }"
-pause
+set "SCRIPT_DIR=%~dp0"
+if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+cd /d "%SCRIPT_DIR%"
+
+set "PS_SCRIPT="
+if exist "%SCRIPT_DIR%\tools\update.ps1" set "PS_SCRIPT=%SCRIPT_DIR%\tools\update.ps1"
+if not defined PS_SCRIPT if exist "%SCRIPT_DIR%\update.ps1" set "PS_SCRIPT=%SCRIPT_DIR%\update.ps1"
+
+if not defined PS_SCRIPT (
+    echo [ERROR] Could not find update.ps1 in "%SCRIPT_DIR%" or "%SCRIPT_DIR%\tools"
+    echo Please make sure you are running update.bat from your real mpv configuration folder.
+    pause
+    exit /b 1
+)
+
+where powershell.exe >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] powershell.exe was not found in your system PATH.
+    pause
+    exit /b 1
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%" -TargetDir "%SCRIPT_DIR%" %*
+set "EXIT_CODE=%ERRORLEVEL%"
+if %EXIT_CODE% neq 0 (
+    echo [!] Update process encountered an issue - Exit Code: %EXIT_CODE%
+    pause
+)
+exit /b %EXIT_CODE%
 "@
     [System.IO.File]::WriteAllText($rootUpdateBat, $batCode, $utf8NoBom)
 

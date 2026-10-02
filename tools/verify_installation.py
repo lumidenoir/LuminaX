@@ -124,6 +124,7 @@ def main():
         "Inter-Medium.ttf",
         "Inter-Regular.ttf",
         "Inter-SemiBold.ttf",
+        "NewYork.otf",
         "uosc_icons.otf",
     ]
     all_fonts_ok = True

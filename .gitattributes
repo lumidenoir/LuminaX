@@ -1,0 +1,26 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Force scripts, Lua code, Python, and configs to LF
+*.sh text eol=lf
+*.lua text eol=lf
+*.py text eol=lf
+*.conf text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Windows command and PowerShell scripts require CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary formats
+*.ttf binary
+*.otf binary
+*.png binary
+*.jpg binary
+*.bgra binary
+*.tar.gz binary
+*.zip binary

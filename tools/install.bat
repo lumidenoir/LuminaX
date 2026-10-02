@@ -8,6 +8,7 @@ setlocal
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+cd /d "%SCRIPT_DIR%"
 
 set "PS_SCRIPT="
 if exist "%SCRIPT_DIR%\install.ps1" set "PS_SCRIPT=%SCRIPT_DIR%\install.ps1"

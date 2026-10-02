@@ -63,6 +63,20 @@ if [ "$CANON_PKG" = "$CANON_TARGET" ]; then
 else
     echo "Installing LuminaX modules & companion scripts..."
     mkdir -p "$TARGET_DIR/scripts"
+
+    # Detect and disable conflicting third-party OSC controllers to prevent dual-controller collision
+    for cos in uosc.lua osc.lua modernx.lua mpv-osc-modern.lua osc-tethys.lua; do
+        if [ -f "$TARGET_DIR/scripts/$cos" ]; then
+            mv "$TARGET_DIR/scripts/$cos" "$TARGET_DIR/scripts/$cos.disabled.bak"
+            echo -e "${YELLOW}⚠ Detected conflicting OSC script '$cos' - backed up to '$cos.disabled.bak'${NC}"
+        fi
+    done
+    if [ -d "$TARGET_DIR/scripts/uosc" ]; then
+        rm -rf "$TARGET_DIR/scripts/uosc.disabled.bak"
+        mv "$TARGET_DIR/scripts/uosc" "$TARGET_DIR/scripts/uosc.disabled.bak"
+        echo -e "${YELLOW}⚠ Detected conflicting 'uosc' directory - backed up to 'uosc.disabled.bak'${NC}"
+    fi
+
     cp -r "$PACKAGE_ROOT/scripts/LuminaX/"* "$TARGET_DIR/scripts/LuminaX/"
     for script in "$PACKAGE_ROOT/scripts/"*.lua; do
         if [ -f "$script" ]; then
@@ -80,6 +94,10 @@ else
     fi
     for t in "$PACKAGE_ROOT/update.sh" "$PACKAGE_ROOT/verify_installation.py"; do
         if [ -f "$t" ]; then cp "$t" "$TARGET_DIR/tools/"; fi
+    done
+    # Remove installer and release packaging scripts from target tools folder
+    for inst in install.sh install.bat install.ps1 package_dist.py; do
+        rm -f "$TARGET_DIR/tools/$inst" 2>/dev/null || true
     done
     chmod +x "$TARGET_DIR/tools/"*.sh 2>/dev/null || true
 
@@ -107,31 +125,49 @@ fi
 # 4. Install script-opts configs & presets
 OSC_CONF_DEST="$TARGET_DIR/script-opts/osc.conf"
 if [ "$CANON_PKG" != "$CANON_TARGET" ]; then
+    SRC_OSC=""
+    if [ -f "$PACKAGE_ROOT/script-opts/osc.def.conf" ]; then
+        SRC_OSC="$PACKAGE_ROOT/script-opts/osc.def.conf"
+    elif [ -f "$PACKAGE_ROOT/script-opts/osc.conf" ]; then
+        SRC_OSC="$PACKAGE_ROOT/script-opts/osc.conf"
+    fi
+
     if [ -f "$OSC_CONF_DEST" ]; then
+        cp "$OSC_CONF_DEST" "$OSC_CONF_DEST.bak"
+        echo "  Backed up existing osc.conf -> osc.conf.bak"
         EXISTING_KEY=$(grep "^tmdb_api_key=" "$OSC_CONF_DEST" | cut -d= -f2- || true)
         if [ -n "$EXISTING_KEY" ] && [ "$EXISTING_KEY" != '""' ] && [ "$EXISTING_KEY" != "your_api_key_here" ]; then
             echo -e "${GREEN}✓ Preserving your existing TMDB API key in osc.conf${NC}"
             # Portable POSIX sed stream without in-place flag difference across BSD/GNU
-            sed "s|^tmdb_api_key=.*|tmdb_api_key=$EXISTING_KEY|" "$PACKAGE_ROOT/script-opts/osc.conf" > "$OSC_CONF_DEST.new"
-            mv "$OSC_CONF_DEST.new" "$OSC_CONF_DEST"
+            if [ -n "$SRC_OSC" ]; then
+                sed "s|^tmdb_api_key=.*|tmdb_api_key=$EXISTING_KEY|" "$SRC_OSC" > "$OSC_CONF_DEST.new"
+                mv "$OSC_CONF_DEST.new" "$OSC_CONF_DEST"
+            fi
         else
             echo "Updating script-opts/osc.conf..."
-            cp "$PACKAGE_ROOT/script-opts/osc.conf" "$OSC_CONF_DEST"
+            if [ -n "$SRC_OSC" ]; then
+                cp "$SRC_OSC" "$OSC_CONF_DEST"
+            fi
         fi
     else
         echo "Creating script-opts/osc.conf..."
-        cp "$PACKAGE_ROOT/script-opts/osc.conf" "$OSC_CONF_DEST"
+        if [ -n "$SRC_OSC" ]; then
+            cp "$SRC_OSC" "$OSC_CONF_DEST"
+        fi
     fi
 
-    # Deploy stats.conf if not already existing
-    if [ ! -f "$TARGET_DIR/script-opts/stats.conf" ]; then
-        if [ -f "$PACKAGE_ROOT/script-opts/stats.conf" ]; then
-            cp "$PACKAGE_ROOT/script-opts/stats.conf" "$TARGET_DIR/script-opts/stats.conf"
-            echo "Installed visionOS stats configuration (script-opts/stats.conf)"
-        elif [ -f "$PACKAGE_ROOT/script-opts/stats.def.conf" ]; then
-            cp "$PACKAGE_ROOT/script-opts/stats.def.conf" "$TARGET_DIR/script-opts/stats.conf"
-            echo "Installed visionOS stats configuration from reference"
-        fi
+    # Deploy stats.conf
+    STATS_CONF_DEST="$TARGET_DIR/script-opts/stats.conf"
+    if [ -f "$STATS_CONF_DEST" ]; then
+        cp "$STATS_CONF_DEST" "$STATS_CONF_DEST.bak"
+        echo "  Backed up existing stats.conf -> stats.conf.bak"
+    fi
+    if [ -f "$PACKAGE_ROOT/script-opts/stats.def.conf" ]; then
+        cp "$PACKAGE_ROOT/script-opts/stats.def.conf" "$STATS_CONF_DEST"
+        echo "Installed visionOS stats configuration (script-opts/stats.conf)"
+    elif [ -f "$PACKAGE_ROOT/script-opts/stats.conf" ]; then
+        cp "$PACKAGE_ROOT/script-opts/stats.conf" "$STATS_CONF_DEST"
+        echo "Installed visionOS stats configuration"
     fi
 
     # Deploy subtitle preset lumina_subtitle.json if not already present
@@ -150,7 +186,10 @@ fi
 
 # 5. Check and configure mpv.conf (Critical for disabling stock controller)
 MPV_CONF="$TARGET_DIR/mpv.conf"
-if [ ! -f "$MPV_CONF" ]; then
+if [ -f "$MPV_CONF" ]; then
+    cp "$MPV_CONF" "$MPV_CONF.bak"
+    echo "  Backed up existing mpv.conf -> mpv.conf.bak"
+else
     if [ -f "$PACKAGE_ROOT/mpv.def.conf" ]; then
         echo "Creating mpv.conf from reference template..."
         cp "$PACKAGE_ROOT/mpv.def.conf" "$MPV_CONF"
@@ -186,15 +225,9 @@ fi
 
 # 6. Check and configure input.conf (for LuminaX glass menu keybindings)
 INPUT_CONF="$TARGET_DIR/input.conf"
-if [ ! -f "$INPUT_CONF" ]; then
-    if [ -f "$PACKAGE_ROOT/input.def.conf" ]; then
-        echo "Creating input.conf from canonical reference template..."
-        cp "$PACKAGE_ROOT/input.def.conf" "$INPUT_CONF"
-    elif [ -f "$PACKAGE_ROOT/input.conf" ]; then
-        echo "Creating input.conf with LuminaX keybindings..."
-        cp "$PACKAGE_ROOT/input.conf" "$INPUT_CONF"
-    fi
-elif [ "$CANON_PKG" != "$CANON_TARGET" ]; then
+if [ -f "$INPUT_CONF" ]; then
+    cp "$INPUT_CONF" "$INPUT_CONF.bak"
+    echo "  Backed up existing input.conf -> input.conf.bak"
     if ! grep -q "menu-sub-config" "$INPUT_CONF" || ! grep -q "menu-playlist" "$INPUT_CONF"; then
         echo "Adding LuminaX menu shortcuts (Tab, p, c, a, s, Alt+s, V, T, U) to $INPUT_CONF..."
         cat << 'EOF' >> "$INPUT_CONF"
@@ -211,6 +244,14 @@ T                 script-binding LuminaX/toggle-tags-menu
 Ctrl+t            script-binding LuminaX/toggle-tags-menu-ctrl
 U                 script-binding LuminaX/check-update
 EOF
+    fi
+else
+    if [ -f "$PACKAGE_ROOT/input.def.conf" ]; then
+        echo "Creating input.conf from canonical reference template..."
+        cp "$PACKAGE_ROOT/input.def.conf" "$INPUT_CONF"
+    elif [ -f "$PACKAGE_ROOT/input.conf" ]; then
+        echo "Creating input.conf with LuminaX keybindings..."
+        cp "$PACKAGE_ROOT/input.conf" "$INPUT_CONF"
     fi
 fi
 

@@ -212,6 +212,12 @@ if ($TargetDir) {
 
 Write-Success "Target mpv configuration directory: $resolvedTargetDir"
 
+if ($PackageRoot -and ($PackageRoot.TrimEnd('\') -ieq $resolvedTargetDir.TrimEnd('\'))) {
+    Write-WarningMsg "Source folder and target mpv config folder are identical ($resolvedTargetDir)."
+    Write-Host "    Note: install.bat is designed to be run from the extracted release package folder." -ForegroundColor Yellow
+    Write-Host "    To update LuminaX in this folder, run update.bat instead." -ForegroundColor Yellow
+}
+
 # Ensure target directories exist
 $subDirs = @(
     (Join-Path $resolvedTargetDir "scripts\LuminaX\modules"),
@@ -379,6 +385,24 @@ if (-not (Test-Path $scriptsBaseDir)) {
     New-Item -ItemType Directory -Path $scriptsBaseDir -Force | Out-Null
 }
 
+# Detect and disable conflicting third-party OSC frontends to prevent double-controller collision
+$conflictingOscScripts = @("uosc.lua", "osc.lua", "modernx.lua", "mpv-osc-modern.lua", "osc-tethys.lua")
+foreach ($cos in $conflictingOscScripts) {
+    $cosPath = Join-Path $scriptsBaseDir $cos
+    if (Test-Path $cosPath) {
+        $bakPath = Join-Path $scriptsBaseDir ($cos + ".disabled.bak")
+        Move-Item -Path $cosPath -Destination $bakPath -Force
+        Write-WarningMsg "Detected conflicting OSC script '$cos' - disabled and backed up to '$cos.disabled.bak' to prevent dual controller collision."
+    }
+}
+$uoscDir = Join-Path $scriptsBaseDir "uosc"
+if (Test-Path $uoscDir) {
+    $bakUosc = Join-Path $scriptsBaseDir "uosc.disabled.bak"
+    if (Test-Path $bakUosc) { Remove-Item -Path $bakUosc -Recurse -Force }
+    Move-Item -Path $uoscDir -Destination $bakUosc -Force
+    Write-WarningMsg "Detected conflicting 'uosc' directory - disabled and backed up to 'uosc.disabled.bak'."
+}
+
 # Copy companion scripts (autoload.lua, thumbfast.lua) directly to scripts/
 $topLevelScripts = Get-ChildItem -Path "$PackageRoot\scripts" -Filter "*.lua" -File
 foreach ($s in $topLevelScripts) {
@@ -432,14 +456,51 @@ foreach ($rootTool in @("update.bat", "update.ps1", "verify_installation.py")) {
         Copy-Item -Path $p -Destination (Join-Path $destTools $rootTool) -Force
     }
 }
+# Remove installer and release packaging scripts from target config folder
+# so users only run update.bat here and keep install.bat in the extracted package folder
+foreach ($instScript in @("install.bat", "install.ps1", "package_dist.py")) {
+    $instPath = Join-Path $destTools $instScript
+    if (Test-Path $instPath) {
+        Remove-Item -Path $instPath -Force -ErrorAction SilentlyContinue
+    }
+}
 
 $rootUpdateBat = Join-Path $resolvedTargetDir "update.bat"
 $batCode = @"
 @echo off
+rem ==============================================================================
 rem LuminaX 1-Click Desktop & Portable Updater
+rem ==============================================================================
 setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & '%~dp0tools\update.ps1' -TargetDir '%~dp0' %* }"
-pause
+set "SCRIPT_DIR=%~dp0"
+if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+cd /d "%SCRIPT_DIR%"
+
+set "PS_SCRIPT="
+if exist "%SCRIPT_DIR%\tools\update.ps1" set "PS_SCRIPT=%SCRIPT_DIR%\tools\update.ps1"
+if not defined PS_SCRIPT if exist "%SCRIPT_DIR%\update.ps1" set "PS_SCRIPT=%SCRIPT_DIR%\update.ps1"
+
+if not defined PS_SCRIPT (
+    echo [ERROR] Could not find update.ps1 in "%SCRIPT_DIR%" or "%SCRIPT_DIR%\tools"
+    echo Please make sure you are running update.bat from your real mpv configuration folder.
+    pause
+    exit /b 1
+)
+
+where powershell.exe >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] powershell.exe was not found in your system PATH.
+    pause
+    exit /b 1
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%" -TargetDir "%SCRIPT_DIR%" %*
+set "EXIT_CODE=%ERRORLEVEL%"
+if %EXIT_CODE% neq 0 (
+    echo [!] Update process encountered an issue - Exit Code: %EXIT_CODE%
+    pause
+)
+exit /b %EXIT_CODE%
 "@
 [System.IO.File]::WriteAllText($rootUpdateBat, $batCode, (New-Object System.Text.UTF8Encoding($false)))
 Write-Success "Installed updater tools and 1-click update.bat"
@@ -461,6 +522,8 @@ foreach ($cand in @((Join-Path $PackageRoot "script-opts\osc.conf"), (Join-Path 
 $existingKey = $null
 
 if (Test-Path $oscConfDest) {
+    Copy-Item -Path $oscConfDest -Destination ($oscConfDest + ".bak") -Force
+    Write-InfoMsg "Backed up existing osc.conf -> osc.conf.bak"
     $existingContent = Get-Content -Path $oscConfDest -Raw -ErrorAction SilentlyContinue
     if ($existingContent -match '(?m)^\s*tmdb_api_key\s*=\s*([^\r\n]+)') {
         $extracted = $matches[1].Trim().Trim('"').Trim("'")
@@ -477,12 +540,10 @@ if ($srcOscConf -and (Test-Path $srcOscConf)) {
         $newContent = Get-Content -Path $srcOscConf -Raw
         $newContent = $newContent -replace '(?m)^\s*tmdb_api_key\s*=.*', "tmdb_api_key=$existingKey"
         [System.IO.File]::WriteAllText($oscConfDest, $newContent, $utf8NoBom)
-        Write-Success "Preserved existing TMDB API key in script-opts\osc.conf"
-    } elseif (-not (Test-Path $oscConfDest)) {
-        Copy-Item -Path $srcOscConf -Destination $oscConfDest -Force
-        Write-Success "Created script-opts\osc.conf"
+        Write-Success "Deployed LuminaX osc.conf (preserved existing TMDB API key)"
     } else {
-        Write-InfoMsg "Preserving existing $oscConfDest"
+        Copy-Item -Path $srcOscConf -Destination $oscConfDest -Force
+        Write-Success "Deployed LuminaX osc.conf"
     }
 }
 
@@ -495,9 +556,13 @@ foreach ($cand in @((Join-Path $PackageRoot "script-opts\stats.conf"), (Join-Pat
     }
 }
 $statsConfDest = Join-Path $resolvedTargetDir "script-opts\stats.conf"
-if ($srcStatsConf -and (-not (Test-Path $statsConfDest))) {
+if (Test-Path $statsConfDest) {
+    Copy-Item -Path $statsConfDest -Destination ($statsConfDest + ".bak") -Force
+    Write-InfoMsg "Backed up existing stats.conf -> stats.conf.bak"
+}
+if ($srcStatsConf) {
     Copy-Item -Path $srcStatsConf -Destination $statsConfDest -Force
-    Write-Success "Created script-opts\stats.conf"
+    Write-Success "Deployed script-opts\stats.conf"
 }
 
 # Optional: script-opts/lumina_subtitle.json
@@ -527,7 +592,10 @@ foreach ($cand in @((Join-Path $PackageRoot "mpv.def.conf"), (Join-Path $Package
     }
 }
 
-if (-not (Test-Path $mpvConf)) {
+if (Test-Path $mpvConf) {
+    Copy-Item -Path $mpvConf -Destination ($mpvConf + ".bak") -Force
+    Write-InfoMsg "Backed up existing mpv.conf -> mpv.conf.bak"
+} else {
     if ($srcMpv) {
         Copy-Item -Path $srcMpv -Destination $mpvConf -Force
         Write-Success "Created mpv.conf from reference template"
@@ -601,14 +669,9 @@ Ctrl+t            script-binding LuminaX/toggle-tags-menu-ctrl
 U                 script-binding LuminaX/check-update
 "@
 
-if (-not (Test-Path $inputConf)) {
-    if ($srcInput) {
-        Copy-Item -Path $srcInput -Destination $inputConf -Force
-    } else {
-        [System.IO.File]::WriteAllText($inputConf, $menuBindings.TrimStart(), $utf8NoBom)
-    }
-    Write-Success "Created input.conf with LuminaX keybindings"
-} else {
+if (Test-Path $inputConf) {
+    Copy-Item -Path $inputConf -Destination ($inputConf + ".bak") -Force
+    Write-InfoMsg "Backed up existing input.conf -> input.conf.bak"
     $existingInput = Get-Content -Path $inputConf -Raw -ErrorAction SilentlyContinue
     if (($existingInput -notmatch 'menu-sub-config') -or ($existingInput -notmatch 'LuminaX/menu-playlist' -and $existingInput -notmatch 'menu-playlist')) {
         [System.IO.File]::AppendAllText($inputConf, "`n" + $menuBindings, $utf8NoBom)
@@ -616,6 +679,13 @@ if (-not (Test-Path $inputConf)) {
     } else {
         Write-Success "input.conf already contains LuminaX shortcuts"
     }
+} else {
+    if ($srcInput) {
+        Copy-Item -Path $srcInput -Destination $inputConf -Force
+    } else {
+        [System.IO.File]::WriteAllText($inputConf, $menuBindings.TrimStart(), $utf8NoBom)
+    }
+    Write-Success "Created input.conf with LuminaX keybindings"
 }
 
 $defInput = Join-Path $PackageRoot "input.def.conf"
@@ -690,7 +760,9 @@ Write-Host "`nNext Steps:" -ForegroundColor Cyan
 Write-Host "  1. Add your free TMDB API key to enable high-resolution movie logos:"
 Write-Host "     $oscConfDest" -ForegroundColor White
 Write-Host "  2. Play any video in mpv to experience the visionOS glass interface!"
-Write-Host "  3. Keybindings: [Space] Pause screensaver | [Tab] Toggle controls | [p] Playlist | [c] Chapters`n"
+Write-Host "  3. Keybindings: [Space] Pause screensaver | [Tab] Toggle controls | [p] Playlist | [c] Chapters"
+Write-Host "  4. To update LuminaX in the future, run update.bat directly in this config folder."
+Write-Host "     (Only run install.bat from the extracted release package folder).`n"
 
 if (-not $NonInteractive) {
     Write-Host "Press Enter to exit..." -ForegroundColor Gray

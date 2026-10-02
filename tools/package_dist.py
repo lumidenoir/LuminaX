@@ -17,6 +17,13 @@ import hashlib
 import re
 import subprocess
 
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 def sha256_file(filepath):
     h = hashlib.sha256()
     with open(filepath, "rb") as f:
@@ -62,34 +69,23 @@ def build_packages():
             shutil.copy2(os.path.join("scripts", s), os.path.join(stage_dir, "scripts", s))
     # Copy fonts
     shutil.copytree("fonts", os.path.join(stage_dir, "fonts"), dirs_exist_ok=True)
-    # Copy script-opts (generate dist normal confs from canonical .def.conf templates)
+    # Copy script-opts (generate dist confs exclusively from canonical .def.conf templates)
     os.makedirs(os.path.join(stage_dir, "script-opts"), exist_ok=True)
-    osc_src = "script-opts/osc.def.conf" if os.path.exists("script-opts/osc.def.conf") else "script-opts/osc.conf"
-    clean_osc_conf(osc_src, os.path.join(stage_dir, "script-opts", "osc.conf"))
-    if os.path.exists("script-opts/osc.def.conf"):
-        clean_osc_conf("script-opts/osc.def.conf", os.path.join(stage_dir, "script-opts", "osc.def.conf"))
+    clean_osc_conf("script-opts/osc.def.conf", os.path.join(stage_dir, "script-opts", "osc.conf"))
+    clean_osc_conf("script-opts/osc.def.conf", os.path.join(stage_dir, "script-opts", "osc.def.conf"))
 
-    stats_src = "script-opts/stats.def.conf" if os.path.exists("script-opts/stats.def.conf") else "script-opts/stats.conf"
-    if os.path.exists(stats_src):
-        shutil.copy2(stats_src, os.path.join(stage_dir, "script-opts", "stats.conf"))
-    if os.path.exists("script-opts/stats.def.conf"):
-        shutil.copy2("script-opts/stats.def.conf", os.path.join(stage_dir, "script-opts", "stats.def.conf"))
+    shutil.copy2("script-opts/stats.def.conf", os.path.join(stage_dir, "script-opts", "stats.conf"))
+    shutil.copy2("script-opts/stats.def.conf", os.path.join(stage_dir, "script-opts", "stats.def.conf"))
 
     if os.path.exists("script-opts/lumina_subtitle.json"):
         shutil.copy2("script-opts/lumina_subtitle.json", os.path.join(stage_dir, "script-opts", "lumina_subtitle.json"))
 
-    # Copy config templates (make .def.conf into the dist normal .conf files & include references)
-    if os.path.exists("input.def.conf"):
-        shutil.copy2("input.def.conf", os.path.join(stage_dir, "input.conf"))
-        shutil.copy2("input.def.conf", os.path.join(stage_dir, "input.def.conf"))
-    elif os.path.exists("input.conf"):
-        shutil.copy2("input.conf", os.path.join(stage_dir, "input.conf"))
+    # Copy config templates (strictly generate active configs from canonical .def.conf templates)
+    shutil.copy2("input.def.conf", os.path.join(stage_dir, "input.conf"))
+    shutil.copy2("input.def.conf", os.path.join(stage_dir, "input.def.conf"))
 
-    if os.path.exists("mpv.def.conf"):
-        shutil.copy2("mpv.def.conf", os.path.join(stage_dir, "mpv.conf"))
-        shutil.copy2("mpv.def.conf", os.path.join(stage_dir, "mpv.def.conf"))
-    elif os.path.exists("mpv.conf"):
-        shutil.copy2("mpv.conf", os.path.join(stage_dir, "mpv.conf"))
+    shutil.copy2("mpv.def.conf", os.path.join(stage_dir, "mpv.conf"))
+    shutil.copy2("mpv.def.conf", os.path.join(stage_dir, "mpv.def.conf"))
     # Copy README
     if os.path.exists("README.md"):
         shutil.copy2("README.md", os.path.join(stage_dir, "README.md"))
