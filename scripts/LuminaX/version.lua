@@ -4,9 +4,9 @@
 -- ============================================================================
 
 local Version = {
-    VERSION            = '1.2.0',
-    RELEASE_NAME       = 'LuminaX Rounded subs & Native updater',
-    RELEASE_DATE       = '2026-10-03',
+    VERSION            = '1.3.0',
+    RELEASE_NAME       = 'LuminaX Smart Binge, Chapter Skip & Audio Enhancement Menu',
+    RELEASE_DATE       = '2026-10-04',
     GITHUB_REPO        = 'lumidenoir/LuminaX',
     GITHUB_API_URL     = 'https://api.github.com/repos/lumidenoir/LuminaX/releases/latest',
     CACHE_META_VERSION = 4,

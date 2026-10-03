@@ -193,6 +193,22 @@ def get_repo_url():
         pass
     return None
 
+def get_version_info():
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    version_file = os.path.join(root_dir, "scripts", "LuminaX", "version.lua")
+    ver = "1.0.0"
+    release_name = ""
+    if os.path.exists(version_file):
+        with open(version_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        m_ver = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", content)
+        if m_ver:
+            ver = m_ver.group(1)
+        m_name = re.search(r"RELEASE_NAME\s*=\s*['\"]([^'\"]+)['\"]", content)
+        if m_name:
+            release_name = m_name.group(1)
+    return ver, release_name
+
 def generate_release_body(dist_dir, checksums):
     import subprocess
     print("\n[5/5] Generating Release Body & Conventional Commit Changelog...")
@@ -241,6 +257,25 @@ def generate_release_body(dist_dir, checksums):
     with open(release_body_path, "w", encoding="utf-8") as f:
         f.write("\n\n".join(sections) + "\n")
     print(f"  ✓ Release body written to {release_body_path}")
+
+    # Generate Release Title for GitHub Releases Page
+    ver, release_name = get_version_info()
+    tag = f"v{ver}" if not ver.startswith("v") else ver
+    release_title = f"{tag} — {release_name}" if release_name else tag
+
+    release_title_path = os.path.join(dist_dir, "release_title.txt")
+    with open(release_title_path, "w", encoding="utf-8") as f:
+        f.write(release_title + "\n")
+    print(f"  ✓ Release title written to {release_title_path}: {release_title}")
+
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if github_output:
+        try:
+            with open(github_output, "a", encoding="utf-8") as f:
+                f.write(f"release_title={release_title}\n")
+                f.write(f"release_tag={tag}\n")
+        except Exception as e:
+            print(f"  ⚠ Note: Could not write to GITHUB_OUTPUT: {e}")
 
 if __name__ == "__main__":
     build_packages()

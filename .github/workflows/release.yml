@@ -34,11 +34,13 @@ jobs:
         run: python3 tests/run_all_tests.py
 
       - name: Build Distribution Packages & Changelog
+        id: dist
         run: python3 tools/package_dist.py
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          name: ${{ steps.dist.outputs.release_title || github.ref_name }}
           body_path: dist/release_body.md
           prerelease: ${{ contains(github.ref_name, '-') }}
           fail_on_unmatched_files: true
