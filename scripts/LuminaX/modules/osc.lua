@@ -100,12 +100,15 @@ local user_opts = {
     tmdb_api_key = '',          -- TMDB v3 API key (free at themoviedb.org)
     screensaver_enabled = true, -- dim overlay + metadata card on pause
     screensaver_delay = 3,      -- seconds of pause before screensaver activates
-    screensaver_align = 'center', -- screensaver alignment: 'center' (Apple TV cinema centered), 'split' (symmetrical 2-column), 'left'
-    logo_engine = 'auto',       -- logo processing engine: 'auto' (python -> ffmpeg fallback), 'ffmpeg' (pure native ffmpeg, zero python)
+    screensaver_align = 'center', -- screensaver alignment: 'center' (Apple TV cinema centered), 'split' (symmetrical 2-column)
+    logo_engine = 'auto',       -- logo processing engine: 'auto' (native ffmpeg with fallback), 'ffmpeg' (pure native ffmpeg), 'text' (bypass logo engine, show title text)
+    screensaver_film_font = 'NewYork', -- font face for title when no logo is used (or logo_engine=text)
     tmdb_cache_lookup = true,   -- whether to use disk/memory cache for tmdb data and logos
+    tmdb_cache_max_mb = 250,    -- maximum cache storage size in MB
     screensaver_anti_burnin = false, -- anti-burn-in micro-drift on pause
     check_updates = true,       -- auto check for LuminaX updates in background
     check_update_interval_days = 3, -- check frequency in days
+    sub_auto_anime_preset = true, -- automatically switch to Anime Fansub subtitle preset when TMDB genre is Animation
 }
 
 -- Icons for jump button depending on jumpamount (Material Icons Round)

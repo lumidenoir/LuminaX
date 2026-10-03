@@ -82,6 +82,14 @@ local ss_hiding         = false
 -- TMDB metadata cache (keyed by media-title)
 local tmdb_cache = {}
 local tmdb_current = nil   -- cached result for current file
+local on_tmdb_loaded_cb = nil
+
+local function set_tmdb_current(data)
+    tmdb_current = data
+    if data and on_tmdb_loaded_cb then
+        pcall(on_tmdb_loaded_cb, data)
+    end
+end
 local tmdb_fetching = false
 local tmdb_debounce_timer = nil
 
@@ -123,6 +131,11 @@ end
 local function ss_remove_logo()
     pcall(mp.commandv, 'overlay-remove', 1)
     ss_overlay_logo = false
+end
+
+local function is_logo_disabled()
+    local eng = tostring(user_opts.logo_engine or ''):lower()
+    return eng == 'text' or eng == 'none' or eng == 'off' or eng == 'disabled'
 end
 
 local function estimate_meta_width(meta_str, fs)
@@ -178,6 +191,39 @@ local function format_ends_time(duration_min)
     return utils_mod and utils_mod.format_ends_time and utils_mod.format_ends_time(duration_min)
 end
 
+local function wrap_lines(text, max_chars, max_lines)
+    if not text or text == '' then return '', 0 end
+    local words = {}
+    for word in text:gmatch('%S+') do table.insert(words, word) end
+    if #words == 0 then return text, 1 end
+
+    local lines = {}
+    local cur_l = ''
+    for _, word in ipairs(words) do
+        if #lines < (max_lines - 1) then
+            if cur_l == '' then
+                cur_l = word
+            elseif #cur_l + 1 + #word <= max_chars then
+                cur_l = cur_l .. ' ' .. word
+            else
+                table.insert(lines, cur_l)
+                cur_l = word
+            end
+        else
+            if #cur_l + 1 + #word <= max_chars + 6 then
+                cur_l = cur_l .. ' ' .. word
+            else
+                if not cur_l:match('%.%.%.$') then cur_l = cur_l .. '...' end
+                break
+            end
+        end
+    end
+    if cur_l ~= '' and #lines < max_lines then
+        table.insert(lines, cur_l)
+    end
+    return table.concat(lines, '\\N'), math.max(1, #lines)
+end
+
 local function render_screensaver(alpha)
     -- alpha: 0=fully opaque, 255=fully transparent (ASS convention)
     if alpha >= 255 or (state and state.menu_active) then
@@ -206,8 +252,9 @@ local function render_screensaver(alpha)
         tier = 2 -- Normal Windowed Mode
     end
 
-    local align_mode = user_opts.screensaver_align or 'center'
-    local is_center = (align_mode == 'center')
+    local align_mode = tostring(user_opts.screensaver_align or 'center'):lower()
+    if align_mode == 'left' then align_mode = 'split' end
+    local is_center = (align_mode ~= 'split')
     local is_split  = (align_mode == 'split')
 
     local margin_x, cur_y, badge_h
@@ -227,42 +274,42 @@ local function render_screensaver(alpha)
     if tier == 1 then
         margin_x     = 50
         cur_y        = 190
-        show_fs      = 28
-        ep_fs        = 20
+        show_fs      = 34
+        ep_fs        = 16
         tag_fs       = 14
         meta_fs      = 13
         badge_h      = 18
         gen_fs       = 11
         ov_fs        = 13
         ov_lh        = 18
-        ov_max_chars = 44
-        dir_fs       = 11
+        ov_max_chars = 46
+        dir_fs       = 12
     elseif tier == 3 then
         margin_x     = 120
         cur_y        = 280
-        show_fs      = 46
-        ep_fs        = 30
+        show_fs      = 56
+        ep_fs        = 22
         tag_fs       = 18
         meta_fs      = 19
         badge_h      = 26
         gen_fs       = 15
         ov_fs        = 16
-        ov_lh        = 24
-        ov_max_chars = 76
-        dir_fs       = 14
+        ov_lh        = 25
+        ov_max_chars = 74
+        dir_fs       = 16
     else -- tier == 2
         margin_x     = 90
         cur_y        = 260
-        show_fs      = 36
-        ep_fs        = 24
+        show_fs      = 44
+        ep_fs        = 19
         tag_fs       = 16
         meta_fs      = 16
         badge_h      = 22
         gen_fs       = 13
         ov_fs        = 15
-        ov_lh        = 22
-        ov_max_chars = 64
-        dir_fs       = 13
+        ov_lh        = 23
+        ov_max_chars = 62
+        dir_fs       = 14
     end
 
     local a_hex = string.format('%02X', alpha)
@@ -311,49 +358,46 @@ local function render_screensaver(alpha)
     local cast         = td and td.cast         or ''
     local studio       = td and td.studio       or ''
 
-    -- 3. Logo or Fallback Text Title
+    -- 3. Typography hierarchy & wrapped text pre-calculations
+    local is_tv = (season_ep ~= '' or ep_title ~= '' or (td and (td.seasons_count ~= nil or td.episodes_count ~= nil)))
+    local is_movie = not is_tv
+    local title_font = (is_tv and user_opts.screensaver_tv_font) or user_opts.screensaver_film_font or user_opts.font or 'NewYork'
+    local title_weight = is_movie and 600 or 700
+    local base_fs = is_movie and math.floor(show_fs * 1.1) or show_fs
+    local title_fs = is_center and math.floor(base_fs * 1.5) or base_fs
+    local title_lh = math.floor(title_fs * 1.22)
+    local ep_lh = math.floor(ep_fs * 1.35)
+    local tag_lh = math.floor(tag_fs * 1.4)
+
+    local safe_show = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(show_name) or show_name
+    local title_max_chars = is_center and (tier == 3 and 28 or (tier == 2 and 24 or 20))
+                                      or (tier == 3 and 26 or (tier == 2 and 22 or 18))
+    local title_wrapped, title_lines = wrap_lines(safe_show, title_max_chars, 2)
+
+    local safe_ep = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(ep_title) or ep_title
+    local ep_max_chars = is_center and (tier == 3 and 58 or (tier == 2 and 48 or 40))
+                                   or (tier == 3 and 40 or (tier == 2 and 34 or 28))
+    local ep_wrapped, ep_lines = wrap_lines(safe_ep, ep_max_chars, 2)
+
+    local safe_tag = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(tagline) or tagline
+    local tag_max_chars = is_center and (tier == 3 and 62 or (tier == 2 and 52 or 42))
+                                    or (tier == 3 and 46 or (tier == 2 and 38 or 30))
+    local tag_wrapped, tag_lines = wrap_lines(safe_tag, tag_max_chars, 2)
+
+    local safe_overview = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(overview) or overview
+    local ov_max_chars = is_center and (tier == 1 and 48 or (tier == 3 and 76 or 64))
+                                   or (tier == 1 and 44 or (tier == 3 and 64 or 54))
+    local max_ov_lines = (tier == 1) and 2 or 3
+    local ov_wrapped, ov_lines = wrap_lines(safe_overview, ov_max_chars, max_ov_lines)
+
     local logo_info = nil
-    if td then
+    if td and not is_logo_disabled() then
         if td.logos and td.logos[tier] then
             logo_info = td.logos[tier]
         elseif td.bgra_path and utils.file_info(td.bgra_path) then
             logo_info = {path = td.bgra_path, w = td.logo_w or 520, h = td.logo_h or 134, is_backdrop = td.is_backdrop}
         end
     end
-
-    -- Overview text wrapping pre-calculation
-    local words = {}
-    if overview ~= '' then
-        local safe_overview = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(overview) or overview
-        for word in safe_overview:gmatch('%S+') do table.insert(words, word) end
-    end
-    local lines = {}
-    local cur_l = ''
-    local max_lines = (tier == 1) and 2 or 3
-    local effective_max_chars = is_center and (tier == 1 and 48 or (tier == 3 and 78 or 64)) or ov_max_chars
-    for _, word in ipairs(words) do
-        if #lines < (max_lines - 1) then
-            if cur_l == '' then
-                cur_l = word
-            elseif #cur_l + 1 + #word <= effective_max_chars then
-                cur_l = cur_l .. ' ' .. word
-            else
-                table.insert(lines, cur_l)
-                cur_l = word
-            end
-        else
-            if #cur_l + 1 + #word <= effective_max_chars + 10 then
-                cur_l = cur_l .. ' ' .. word
-            else
-                if not cur_l:match('%.%.%.$') then cur_l = cur_l .. '...' end
-                break
-            end
-        end
-    end
-    if cur_l ~= '' and #lines < max_lines then
-        table.insert(lines, cur_l)
-    end
-    local ov_wrapped = table.concat(lines, '\\N')
 
     -- Info Card Rows pre-calculation
     local rows = {}
@@ -439,64 +483,104 @@ local function render_screensaver(alpha)
     end
 
     -- Symmetrical Vertical & Horizontal Positioning
+    local split_left_h = 0
+    local container_w = 0
+    local content_cx
     if is_center then
+        content_cx = math.floor(VIRTUAL_W / 2) + drift_x
         local est_h = 0
         if logo_info and logo_info.path and utils.file_info(logo_info.path) then
             est_h = est_h + math.floor(logo_info.h / scale_y) + (tier == 1 and 14 or 20)
             if logo_info.is_backdrop then
-                est_h = est_h + math.floor(show_fs * 1.35) + 6
+                est_h = est_h + (title_lines * title_lh) + 6
             end
         else
-            est_h = est_h + math.floor(show_fs * 1.35) + 6
+            est_h = est_h + (title_lines * title_lh) + 6
         end
         if ep_title ~= '' then
-            est_h = est_h + math.floor(ep_fs * 1.35) + 8
+            est_h = est_h + (ep_lines * ep_lh) + 8
         elseif tagline ~= '' then
-            est_h = est_h + math.floor(tag_fs * 1.4) + 8
+            est_h = est_h + (tag_lines * tag_lh) + 8
         end
         est_h = est_h + math.max(badge_h + 8, math.floor(meta_fs * 1.5) + 6)
         if genres ~= '' then
             est_h = est_h + math.floor(gen_fs * 1.4) + 6
         end
-        if #lines > 0 then
-            est_h = est_h + (#lines * ov_lh) + 12
+        if ov_lines > 0 then
+            est_h = est_h + (ov_lines * ov_lh) + 12
         end
         if director ~= '' then
-            est_h = est_h + math.floor(dir_fs * 1.4) + 4
+            est_h = est_h + math.floor(dir_fs * 1.45) + 6
         end
         if cast ~= '' then
-            est_h = est_h + math.floor(dir_fs * 1.4) + 12
+            est_h = est_h + math.floor(dir_fs * 1.45) + 14
         elseif director ~= '' then
-            est_h = est_h + 10
+            est_h = est_h + 12
         end
         if #rows > 0 then
-            local row_h = (tier == 3) and 42 or ((tier == 2) and 36 or 30)
+            local row_h = (tier == 3) and 40 or ((tier == 2) and 35 or 30)
             local card_h = (#rows * row_h) + 16
             est_h = est_h + card_h + 16
         end
-        cur_y = math.max(40, math.floor((VIRTUAL_H - est_h) / 2)) + drift_y
-    elseif is_split then
-        local max_container_w = (tier == 3) and 1320 or 1080
-        local container_w = math.min(VIRTUAL_W - 80, max_container_w)
+        -- Push down slightly to optical center (prevents top-heavy crowding)
+        local optical_push = (tier == 3) and 38 or ((tier == 2) and 24 or 10)
+        cur_y = math.max(40, math.floor((VIRTUAL_H - est_h) / 2) + optical_push) + drift_y
+    else -- split layout (left aliased to split)
+        local col_gap = (tier == 3) and 70 or ((tier == 2) and 50 or 40)
+        local card_w_split = (tier == 3) and 400 or ((tier == 2) and 350 or 285)
+        local left_col_w = (tier == 3) and 660 or ((tier == 2) and 560 or 470)
+        container_w = math.min(VIRTUAL_W - 80, left_col_w + col_gap + card_w_split)
         margin_x = math.floor((VIRTUAL_W - container_w) / 2) + drift_x
-        cur_y = cur_y + drift_y
-    else
-        margin_x = margin_x + drift_x
-        cur_y = cur_y + drift_y
+        content_cx = margin_x + math.floor(left_col_w / 2)
+
+        -- Dynamic vertical centering for 2-column split layout
+        local left_h = 0
+        if logo_info and logo_info.path and utils.file_info(logo_info.path) then
+            left_h = left_h + math.floor(logo_info.h / scale_y) + (tier == 1 and 14 or 20)
+            if logo_info.is_backdrop then
+                left_h = left_h + (title_lines * title_lh) + 6
+            end
+        else
+            left_h = left_h + (title_lines * title_lh) + 6
+        end
+        if ep_title ~= '' then
+            left_h = left_h + (ep_lines * ep_lh) + 8
+        elseif tagline ~= '' then
+            left_h = left_h + (tag_lines * tag_lh) + 8
+        end
+        left_h = left_h + math.max(badge_h + 8, math.floor(meta_fs * 1.5) + 6)
+        if genres ~= '' then
+            left_h = left_h + math.floor(gen_fs * 1.4) + 6
+        end
+        if ov_lines > 0 then
+            left_h = left_h + (ov_lines * ov_lh) + 12
+        end
+        if director ~= '' then
+            left_h = left_h + math.floor(dir_fs * 1.45) + 6
+        end
+        if cast ~= '' then
+            left_h = left_h + math.floor(dir_fs * 1.45) + 14
+        elseif director ~= '' then
+            left_h = left_h + 12
+        end
+
+        split_left_h = left_h
+        local row_h = (tier == 3) and 40 or ((tier == 2) and 35 or 30)
+        local right_h = (#rows > 0) and ((#rows * row_h) + 16) or 0
+        local split_h = math.max(left_h, right_h)
+
+        local optical_push = (tier == 3) and 26 or ((tier == 2) and 16 or 8)
+        cur_y = math.max(40, math.floor((VIRTUAL_H - split_h) / 2) + optical_push) + drift_y
     end
     local start_cur_y = cur_y
 
     -- Render Logo or Title
+    local track_tag = (is_movie or (title_font and title_font:lower():find('newyork'))) and '\\fsp1' or ''
     if logo_info and logo_info.path and utils.file_info(logo_info.path) then
         if alpha < 120 then
             local actual_w = logo_info.w
             local actual_h = logo_info.h
-            local actual_x
-            if is_center then
-                actual_x = math.floor((osd_w - actual_w) / 2) + math.floor(drift_x * scale_x)
-            else
-                actual_x = math.floor(margin_x * scale_x)
-            end
+            local actual_x = math.floor(content_cx * scale_x - actual_w / 2)
             local actual_y = math.floor(cur_y * scale_y)
             pcall(mp.commandv, 'overlay-add', 1, actual_x, actual_y, logo_info.path, 0, 'bgra', actual_w, actual_h, actual_w * 4)
             ss_overlay_logo = true
@@ -505,78 +589,49 @@ local function render_screensaver(alpha)
         end
         cur_y = cur_y + math.floor(logo_info.h / scale_y) + (tier == 1 and 14 or 20)
 
+        local shad_tag = is_center and '\\shad2.5\\4c&H000000&\\4a&H50&' or '\\shad1.5\\4c&H000000&\\4a&H60&'
         if logo_info.is_backdrop then
             ass:new_event()
-            if is_center then
-                ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
-                ass:an(8)
-            else
-                ass:pos(margin_x, cur_y)
-                ass:an(7)
-            end
-            local is_tv = (season_ep ~= '' or ep_title ~= '' or (td and (td.seasons_count ~= nil or td.episodes_count ~= nil)))
-            local is_movie = not is_tv
-            local title_font = is_movie and (user_opts.screensaver_film_font or 'NewYork') or 'Inter'
-            local title_weight = is_movie and 600 or 700
-            local title_fs = is_movie and math.floor(show_fs * (tier == 3 and 1.35 or 1.25)) or show_fs
-            local track_tag = is_movie and '\\fsp1' or ''
+            ass:pos(content_cx, cur_y)
+            ass:an(8)
             ass:append(string.format(
-                '{\\fn%s\\b%d\\fs%d%s\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
-                title_font, title_weight, title_fs, track_tag, a_hex))
-            ass:append(utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(show_name) or show_name)
-            cur_y = cur_y + math.floor(title_fs * 1.35) + 6
+                '{\\fn%s\\b%d\\fs%d%s\\1c&HFFFFFF&\\1a&H%s&\\bord0%s\\lh%d\\q2}',
+                title_font, title_weight, title_fs, track_tag, a_hex, shad_tag, title_lh))
+            ass:append(title_wrapped)
+            cur_y = cur_y + (title_lines * title_lh) + 6
         end
     else
         ss_remove_logo()
         ass:new_event()
-        if is_center then
-            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
-            ass:an(8)
-        else
-            ass:pos(margin_x, cur_y)
-            ass:an(7)
-        end
-        local is_tv = (season_ep ~= '' or ep_title ~= '' or (td and (td.seasons_count ~= nil or td.episodes_count ~= nil)))
-        local is_movie = not is_tv
-        local title_font = is_movie and (user_opts.screensaver_film_font or 'NewYork') or 'Inter'
-        local title_weight = is_movie and 600 or 700
-        local title_fs = is_movie and math.floor(show_fs * (tier == 3 and 1.35 or 1.25)) or show_fs
-        local track_tag = is_movie and '\\fsp1' or ''
+        ass:pos(content_cx, cur_y)
+        ass:an(8)
+        local shad_tag = is_center and '\\shad2.5\\4c&H000000&\\4a&H50&' or '\\shad1.5\\4c&H000000&\\4a&H60&'
         ass:append(string.format(
-            '{\\fn%s\\b%d\\fs%d%s\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H80&\\q2}',
-            title_font, title_weight, title_fs, track_tag, a_hex))
-        ass:append(utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(show_name) or show_name)
-        cur_y = cur_y + math.floor(title_fs * 1.35) + 6
+            '{\\fn%s\\b%d\\fs%d%s\\1c&HFFFFFF&\\1a&H%s&\\bord0%s\\lh%d\\q2}',
+            title_font, title_weight, title_fs, track_tag, a_hex, shad_tag, title_lh))
+        ass:append(title_wrapped)
+        cur_y = cur_y + (title_lines * title_lh) + 6
     end
 
     -- 4. Episode Title (TV) or Tagline (Movie)
     if ep_title ~= '' then
         ass:new_event()
-        if is_center then
-            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
-            ass:an(8)
-        else
-            ass:pos(margin_x, cur_y)
-            ass:an(7)
-        end
+        ass:pos(content_cx, cur_y)
+        ass:an(8)
         ass:append(string.format(
-            '{\\fnInter\\b700\\fs%d\\1c&HFFFFFF&\\1a&H%s&\\bord0\\shad0\\q2}', ep_fs, a_hex))
-        ass:append(utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(ep_title) or ep_title)
-        cur_y = cur_y + math.floor(ep_fs * 1.35) + 8
+            '{\\fnInter\\b500\\fs%d\\1c&HE0E0E8&\\1a&H%s&\\bord0\\shad1\\4c&H000000&\\4a&H90&\\lh%d\\q2}',
+            ep_fs, a_hex, ep_lh))
+        ass:append(ep_wrapped)
+        cur_y = cur_y + (ep_lines * ep_lh) + 8
     elseif tagline ~= '' then
         ass:new_event()
-        if is_center then
-            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
-            ass:an(8)
-        else
-            ass:pos(margin_x, cur_y)
-            ass:an(7)
-        end
+        ass:pos(content_cx, cur_y)
+        ass:an(8)
         ass:append(string.format(
-            '{\\fnInter\\b400\\i1\\fs%d\\1c&H9E9EA8&\\1a&H%s&\\bord0\\shad0\\q2}', tag_fs, a_hex))
-        local safe_tag = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(tagline) or tagline
-        ass:append('“' .. safe_tag .. '”')
-        cur_y = cur_y + math.floor(tag_fs * 1.4) + 8
+            '{\\fnInter\\b400\\i1\\fs%d\\1c&H9E9EA8&\\1a&H%s&\\bord0\\shad0\\lh%d\\q2}',
+            tag_fs, a_hex, tag_lh))
+        ass:append('“' .. tag_wrapped .. '”')
+        cur_y = cur_y + (tag_lines * tag_lh) + 8
     end
 
     -- 5. Metadata Row: 2026 · 1h 48m · ★ 6.7   [PG-13] [1080P] [5.1]
@@ -605,15 +660,8 @@ local function render_screensaver(alpha)
     local row_gap = (meta_w > 0 and badges_w > 0) and (tier == 1 and 12 or 16) or 0
     local total_row_w = meta_w + row_gap + badges_w
 
-    local meta_start_x
-    local badges_start_x
-    if is_center then
-        meta_start_x = math.floor((VIRTUAL_W - total_row_w) / 2) + drift_x
-        badges_start_x = meta_start_x + meta_w + row_gap
-    else
-        meta_start_x = margin_x
-        badges_start_x = margin_x + meta_w + row_gap
-    end
+    local meta_start_x = math.floor(content_cx - total_row_w / 2)
+    local badges_start_x = meta_start_x + meta_w + row_gap
 
     if meta_line ~= '' then
         ass:new_event()
@@ -633,13 +681,8 @@ local function render_screensaver(alpha)
     -- 6. Genres (if available from TMDB)
     if genres ~= '' then
         ass:new_event()
-        if is_center then
-            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
-            ass:an(8)
-        else
-            ass:pos(margin_x, cur_y)
-            ass:an(7)
-        end
+        ass:pos(content_cx, cur_y)
+        ass:an(8)
         ass:append(string.format(
             '{\\fnInter\\b500\\fs%d\\1c&H787882&\\1a&H%s&\\bord0\\shad0\\fsp0.5}', gen_fs, a_hex))
         ass:append(genres)
@@ -647,55 +690,40 @@ local function render_screensaver(alpha)
     end
 
     -- 7. Synopsis / Overview
-    if #lines > 0 then
+    if ov_lines > 0 then
         ass:new_event()
-        if is_center then
-            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
-            ass:an(8)
-        else
-            ass:pos(margin_x, cur_y)
-            ass:an(7)
-        end
+        ass:pos(content_cx, cur_y)
+        ass:an(8)
         ass:append(string.format(
             '{\\fnInter\\b400\\fs%d\\1c&HC8C4C0&\\1a&H%s&\\bord0\\shad0\\lh%d\\q2}',
             ov_fs, a_hex, ov_lh))
         ass:append(ov_wrapped)
-        cur_y = cur_y + (#lines * ov_lh) + 12
+        cur_y = cur_y + (ov_lines * ov_lh) + 12
     end
 
     -- 8. Director / Creator & Cast (Elevated contrast)
     if director ~= '' then
         ass:new_event()
-        if is_center then
-            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
-            ass:an(8)
-        else
-            ass:pos(margin_x, cur_y)
-            ass:an(7)
-        end
+        ass:pos(content_cx, cur_y)
+        ass:an(8)
         ass:append(string.format(
-            '{\\fnInter\\b500\\fs%d\\1c&HA5958E&\\1a&H%s&\\bord0\\shad0}', dir_fs, a_hex))
+            '{\\fnInter\\b500\\fs%d\\1c&HD0C8C0&\\1a&H%s&\\bord0\\shad0}', dir_fs, a_hex))
         local safe_dir = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(director) or director
         ass:append('Directed by ' .. safe_dir)
-        cur_y = cur_y + math.floor(dir_fs * 1.4) + 4
+        cur_y = cur_y + math.floor(dir_fs * 1.45) + 6
     end
 
     if cast ~= '' then
         ass:new_event()
-        if is_center then
-            ass:pos(VIRTUAL_W / 2 + drift_x, cur_y)
-            ass:an(8)
-        else
-            ass:pos(margin_x, cur_y)
-            ass:an(7)
-        end
+        ass:pos(content_cx, cur_y)
+        ass:an(8)
         ass:append(string.format(
-            '{\\fnInter\\b500\\fs%d\\1c&H9E9EA8&\\1a&H%s&\\bord0\\shad0}', math.max(10, dir_fs - 1), a_hex))
+            '{\\fnInter\\b500\\fs%d\\1c&HB8B4BC&\\1a&H%s&\\bord0\\shad0}', math.max(11, dir_fs - 1), a_hex))
         local safe_cast = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(cast) or cast
-        ass:append('< ' .. safe_cast .. ' >')
-        cur_y = cur_y + math.floor(dir_fs * 1.4) + 12
+        ass:append(safe_cast)
+        cur_y = cur_y + math.floor(dir_fs * 1.45) + 14
     elseif director ~= '' then
-        cur_y = cur_y + 10
+        cur_y = cur_y + 12
     end
 
     -- 9. Info Card (Runtime, Language, Release Date, Seasons, Status)
@@ -703,26 +731,21 @@ local function render_screensaver(alpha)
         local card_w
         local card_x
         local card_y
-        local row_h = (tier == 3) and 42 or ((tier == 2) and 36 or 30)
+        local row_h = (tier == 3) and 40 or ((tier == 2) and 35 or 30)
         local card_h = (#rows * row_h) + 16
-        local r = 14
-        local f_size = (tier == 3) and 14 or ((tier == 2) and 12 or 11)
+        local r = 15
+        local f_size = (tier == 3) and 14 or ((tier == 2) and 13 or 12)
 
         if is_center then
-            card_w = (tier == 3) and 420 or ((tier == 2) and 360 or 280)
+            card_w = (tier == 3) and 450 or ((tier == 2) and 385 or 300)
             card_x = math.floor((VIRTUAL_W - card_w) / 2) + drift_x
-            card_y = cur_y + 4
-        elseif is_split then
-            local max_container_w = (tier == 3) and 1320 or 1080
+            card_y = cur_y + 8
+        else -- split
+            local max_container_w = (tier == 3) and 1140 or ((tier == 2) and 960 or 800)
             local container_w = math.min(VIRTUAL_W - 80, max_container_w)
-            card_w = (tier == 3) and 380 or ((tier == 2) and 320 or 250)
+            card_w = (tier == 3) and 400 or ((tier == 2) and 350 or 285)
             card_x = margin_x + container_w - card_w
-            card_y = start_cur_y
-        else
-            card_w = (tier == 3) and 380 or ((tier == 2) and 320 or 250)
-            local max_container_w = (tier == 3) and 1320 or 1080
-            card_x = math.min(VIRTUAL_W - margin_x - card_w, margin_x + max_container_w - card_w)
-            card_y = start_cur_y
+            card_y = start_cur_y + math.max(0, math.floor((split_left_h - card_h) / 2))
         end
 
         -- Card background pill (frosted obsidian with subtle specular border)
@@ -750,12 +773,12 @@ local function render_screensaver(alpha)
             ass:an(7)
             ass:append(string.format('{\\blur0\\bord0\\1c&HFFFFFF&\\1a&H%s&}', div_hex))
             ass:draw_start()
-            ass:rect_cw(card_x + 14, dy, card_x + card_w - 14, dy + 1)
+            ass:rect_cw(card_x + 16, dy, card_x + card_w - 16, dy + 1)
             ass:draw_stop()
         end
 
         -- Row labels & values
-        local pad_x = (tier == 1) and 14 or 20
+        local pad_x = (tier == 1) and 14 or 18
         for i, row in ipairs(rows) do
             local cy_row = card_y + 8 + ((i - 0.5) * row_h)
 
@@ -1265,6 +1288,11 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
         orig_lang = nil
     end
 
+    if is_logo_disabled() then
+        if cb then cb(nil) end
+        return
+    end
+
     local key = user_opts.tmdb_api_key
     if not key or key == '' then cb(nil); return end
 
@@ -1546,6 +1574,11 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
             end
         end
 
+        if is_logo_disabled() then
+            if cb then cb(nil) end
+            return
+        end
+
         local engine = user_opts.logo_engine or 'auto'
         if engine == 'ffmpeg' or engine == 'auto' or is_backdrop then
             process_logo_ffmpeg(png_tmp, chosen_w, chosen_h, cb)
@@ -1590,7 +1623,7 @@ local function fetch_tmdb_data(force_refresh)
         if ss_active then render_screensaver(ss_alpha) end
     else
         if tmdb_cache[cache_key] then
-            tmdb_current = tmdb_cache[cache_key]
+            set_tmdb_current(tmdb_cache[cache_key])
             if ss_active then render_screensaver(ss_alpha) end
             return
         end
@@ -1604,9 +1637,9 @@ local function fetch_tmdb_data(force_refresh)
                 disk_cached.logo_retry = nil
             end
             tmdb_cache[cache_key] = disk_cached
-            tmdb_current = disk_cached
+            set_tmdb_current(disk_cached)
             if ss_active then render_screensaver(ss_alpha) end
-            if not disk_cached.bgra_path and disk_cached.show_id and not disk_cached.logo_retry then
+            if not is_logo_disabled() and not disk_cached.bgra_path and disk_cached.show_id and not disk_cached.logo_retry then
                 disk_cached.logo_retry = true
                 local is_tv = (disk_cached.season_ep and disk_cached.season_ep ~= '')
                 local search_type = is_tv and 'tv' or 'movie'
@@ -1757,7 +1790,7 @@ local function fetch_tmdb_data(force_refresh)
                     runtime_min  = det and det.runtime,
                 }
                 tmdb_cache[cache_key] = result
-                tmdb_current = result
+                set_tmdb_current(result)
                 if ss_active then render_screensaver(ss_alpha) end
 
                 fetch_tmdb_logo('movie', show_id, result.language, function(logos_tbl, is_bd)
@@ -1864,7 +1897,7 @@ local function fetch_tmdb_data(force_refresh)
                     network        = (tv_det and tv_det.networks and tv_det.networks[1] and tv_det.networks[1].name) or nil,
                 }
                 tmdb_cache[cache_key] = result
-                tmdb_current = result
+                set_tmdb_current(result)
                 if ss_active then render_screensaver(ss_alpha) end
 
                 fetch_tmdb_logo('tv', show_id, item.original_language, function(logos_tbl, is_bd)
@@ -2109,6 +2142,7 @@ function M.init(ctx)
     request_tick      = ctx.request_tick or function() end
     utils_mod         = ctx.utils
     is_menu_active_fn = ctx.is_menu_active
+    on_tmdb_loaded_cb = ctx.on_tmdb_loaded
 
     if mp and mp.add_timeout then
         mp.add_timeout(10, function()
@@ -2202,5 +2236,9 @@ M.hash_djb2                 = hash_djb2
 M.safe_cache_filename       = safe_cache_filename
 M.legacy_cache_filename     = legacy_cache_filename
 M.prune_cache_dir           = prune_cache_dir
+M.is_logo_disabled          = is_logo_disabled
+M.wrap_lines                = wrap_lines
+M.set_current               = set_tmdb_current
+M.render                    = render_screensaver
 
 return M

@@ -428,6 +428,65 @@ package.loaded['mp.utils'].readdir = orig_readdir
 package.loaded['mp.utils'].file_info = orig_file_info
 os.remove = orig_os_remove
 
+print("\n=== 8. Testing Logo Bypass & Text Mode (logo_engine=text) ===")
+assert_true("is_logo_disabled exported", type(ss.is_logo_disabled) == 'function')
+
+-- Test default: logo enabled
+local mock_opts = { logo_engine = 'auto' }
+ss.init({ user_opts = mock_opts })
+assert_eq("Default auto engine has logo enabled", ss.is_logo_disabled(), false)
+
+-- Test ffmpeg engine: logo enabled
+mock_opts.logo_engine = 'ffmpeg'
+assert_eq("ffmpeg engine has logo enabled", ss.is_logo_disabled(), false)
+
+-- Test logo_engine = 'text' (bypass logo)
+mock_opts.logo_engine = 'text'
+assert_eq("logo_engine='text' bypasses logo engine", ss.is_logo_disabled(), true)
+
+-- Test case insensitivity (TEXT)
+mock_opts.logo_engine = 'TEXT'
+assert_eq("logo_engine='TEXT' case-insensitive bypass", ss.is_logo_disabled(), true)
+
+-- Test logo_engine = 'none'
+mock_opts.logo_engine = 'none'
+assert_eq("logo_engine='none' bypasses logo engine", ss.is_logo_disabled(), true)
+
+-- Test logo_engine = 'off'
+mock_opts.logo_engine = 'off'
+assert_eq("logo_engine='off' bypasses logo engine", ss.is_logo_disabled(), true)
+
+-- Test logo_engine = 'disabled'
+mock_opts.logo_engine = 'disabled'
+assert_eq("logo_engine='disabled' bypasses logo engine", ss.is_logo_disabled(), true)
+
+-- Test restore to auto
+mock_opts.logo_engine = 'auto'
+assert_eq("logo_engine='auto' restores logo engine", ss.is_logo_disabled(), false)
+
+print("\n=== 9. Testing Smart Title & Text Wrapping (wrap_lines) ===")
+assert_true("wrap_lines exported", type(ss.wrap_lines) == 'function')
+
+local short_t, short_lines = ss.wrap_lines("Sentenced to Be a Hero", 26, 2)
+assert_eq("Short title remains 1 line", short_lines, 1)
+assert_eq("Short title text matches", short_t, "Sentenced to Be a Hero")
+
+local long_ep, long_lines = ss.wrap_lines("Sentence: Aid In Evacuation of loff Cheg Port 2", 30, 2)
+assert_eq("Long episode title wraps to 2 lines", long_lines, 2)
+assert_true("Line break inserted at word boundary", long_ep:find("\\N") ~= nil)
+
+local mega_t, mega_lines = ss.wrap_lines("I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Across All Realms", 25, 2)
+assert_eq("Overly long title capped at max_lines", mega_lines, 2)
+assert_true("Overly long title has ellipsis on last line", mega_t:find("%.%.%.$") ~= nil)
+
+local empty_t, empty_lines = ss.wrap_lines("", 30, 2)
+assert_eq("Empty title returns 0 lines", empty_lines, 0)
+assert_eq("Empty title returns empty string", empty_t, "")
+
+local nil_t, nil_lines = ss.wrap_lines(nil, 30, 2)
+assert_eq("Nil title returns 0 lines", nil_lines, 0)
+assert_eq("Nil title returns empty string", nil_t, "")
+
 print(string.format("\n========================================================"))
 print(string.format("Screensaver Robustness Suite: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))
 print(string.format("========================================================"))
