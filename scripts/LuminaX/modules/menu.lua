@@ -46,6 +46,14 @@ function M.init(ctx)
         M.invalidate_items()
         if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
     end)
+    mp.observe_property('playlist-count', nil, function()
+        M.invalidate_items()
+        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
+    end)
+    mp.observe_property('playlist', nil, function()
+        M.invalidate_items()
+        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
+    end)
     mp.observe_property('chapter', nil, function()
         M.invalidate_items()
         if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
@@ -105,34 +113,98 @@ end
 
 local menu_search_query = ''
 
-local function is_night_mode_active()
+local AUDIO_PROFILES = {
+    {
+        id = 'off',
+        label = 'Pure Studio (Off)',
+        value = 'Off',
+        sublabel = 'Direct bit-perfect passthrough',
+        filter = nil,
+    },
+    {
+        id = 'night',
+        label = 'Night Mode',
+        value = 'Night Mode',
+        sublabel = 'Normalizes loud SFX & lifts soft whispers',
+        filter = 'dynaudnorm=f=150:g=15:m=10:p=0.9',
+    },
+    {
+        id = 'dialogue',
+        label = 'Voice Boost',
+        value = 'Voice Boost',
+        sublabel = 'Intelligibility boost & 300Hz mud scoop',
+        filter = 'volume=-3.5dB,highpass=f=85,equalizer=f=300:t=q:w=1.2:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=4.0',
+    },
+    {
+        id = 'bass',
+        label = 'Cinema Bass',
+        value = 'Cinema Bass',
+        sublabel = 'Deep low-end rumble with true-peak limiter',
+        filter = 'volume=-4.5dB,bass=g=5.0:f=105:w=0.6,alimiter=limit=-0.2dB',
+    },
+    {
+        id = 'crossfeed',
+        label = 'Spatial Headphone',
+        value = 'Spatial Headphone',
+        sublabel = 'Bauer binaural crossfeed (reduces fatigue)',
+        filter = 'bs2b=profile=default',
+    },
+}
+
+local current_audio_profile_idx = 1
+
+local function detect_current_audio_profile_idx()
     local af = mp.get_property_native('af', {})
-    if type(af) ~= 'table' then return false end
+    if type(af) ~= 'table' or #af == 0 then return 1 end
     for _, filter in ipairs(af) do
-        if filter.label == 'nightmode' or (filter.name and filter.name:find('nightmode')) then
-            return true
+        local label = filter.label or ''
+        local name = filter.name or ''
+        if label == 'nightmode' or name:find('nightmode') then
+            return 2 -- Night Mode legacy tag
+        end
+        if label == 'enhancement' or name:find('enhancement') then
+            return current_audio_profile_idx or 1
         end
     end
-    return false
+    return 1 -- Off
+end
+
+local function set_audio_profile(idx)
+    if idx < 1 then idx = #AUDIO_PROFILES end
+    if idx > #AUDIO_PROFILES then idx = 1 end
+    current_audio_profile_idx = idx
+    local profile = AUDIO_PROFILES[idx]
+
+    -- Remove both current @enhancement and legacy @nightmode cleanly
+    pcall(mp.commandv, "af", "remove", "@enhancement")
+    pcall(mp.commandv, "af", "remove", "@nightmode")
+
+    if profile.filter and profile.filter ~= '' then
+        pcall(mp.commandv, "af", "add", "@enhancement:lavfi=[" .. profile.filter .. "]")
+    end
+
+    if ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill('\238\142\161', 'Audio Profile: ' .. (profile.value or profile.label))
+    else
+        mp.osd_message('Audio Profile: ' .. (profile.value or profile.label), 2)
+    end
+end
+
+local function step_audio_profile(delta)
+    local cur_idx = detect_current_audio_profile_idx()
+    set_audio_profile(cur_idx + delta)
+end
+
+local function is_night_mode_active()
+    return detect_current_audio_profile_idx() > 1
 end
 
 local function toggle_night_mode()
-    local active = is_night_mode_active()
-    if active then
-        mp.commandv("af", "remove", "@nightmode")
-        if ctx_ref.huds and ctx_ref.huds.show_pill then
-            ctx_ref.huds.show_pill('\238\142\161', 'Dialogue Clarity: Off')
-        else
-            mp.osd_message("Night Mode: Off", 2)
-        end
+    local cur = detect_current_audio_profile_idx()
+    if cur > 1 then
+        set_audio_profile(1) -- Off
     else
-        local filter_str = "dynaudnorm=f=150:g=15:m=10:p=0.9"
-        mp.commandv("af", "add", "@nightmode:lavfi=[" .. filter_str .. "]")
-        if ctx_ref.huds and ctx_ref.huds.show_pill then
-            ctx_ref.huds.show_pill('\238\142\161', 'Dialogue Clarity: On')
-        else
-            mp.osd_message("Night Mode: On (Dialogue Clarity)", 2)
-        end
+        set_audio_profile(2) -- Night Mode
     end
 end
 
@@ -323,22 +395,23 @@ function M.menu_get_items()
     elseif state.menu_active == 'audio' then
         local audio_tracks = get_tracks_by_type('audio')
 
-        -- 1. Enhancements: Night Mode (Dialogue Clarity)
+        -- 1. Enhancements: Audio Profile Suite
         items[#items + 1] = {
             type = 'header',
             label = 'ENHANCEMENTS',
             index = #items + 1
         }
-        local night_active = is_night_mode_active()
+        local cur_idx = detect_current_audio_profile_idx()
+        local cur_prof = AUDIO_PROFILES[cur_idx] or AUDIO_PROFILES[1]
         items[#items + 1] = {
-            label = 'Night Mode (Dialogue Clarity)',
-            sublabel = 'Normalizes loud SFX & lifts vocals',
+            label = 'Audio Profile',
+            sublabel = cur_prof.sublabel,
             type = 'stepper',
-            value = night_active and 'On' or 'Off',
-            current = night_active,
-            action = 'toggle_night_mode',
-            on_prev = toggle_night_mode,
-            on_next = toggle_night_mode,
+            value = cur_prof.value,
+            current = (cur_idx > 1),
+            action = 'cycle_audio_profile',
+            on_prev = function() step_audio_profile(-1) end,
+            on_next = function() step_audio_profile(1) end,
             index = #items + 1
         }
 
@@ -851,8 +924,12 @@ function M.menu_confirm()
     elseif state.menu_active == 'chapters' then
         mp.commandv('set', 'chapter', tostring(item.index))
     elseif state.menu_active == 'audio' then
-        if item.action == 'toggle_night_mode' then
-            toggle_night_mode()
+        if item.action == 'toggle_night_mode' or item.action == 'cycle_audio_profile' then
+            if item.on_next then
+                item.on_next()
+            else
+                step_audio_profile(1)
+            end
             M.invalidate_items()
             if ctx_ref.request_tick then ctx_ref.request_tick() end
             return
