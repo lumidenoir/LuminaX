@@ -13,6 +13,7 @@ This directory contains the core Lua modules and entry points for LuminaX.
 * `modules/huds.lua`: Notification capsules for volume, seeks, delays, and updates.
 * `modules/tag_editor.lua`: Tracker watermark cleaner and title editor.
 * `modules/updater.lua`: Background release checks and in-player update runner.
+* `modules/smart_skip.lua`: Smart chapter skip, Next Episode binge card, and seekbar zone tinting.
 * `modules/utils.lua`: Geometry, color formatting, and ASS drawing utilities.
 
 For full installation instructions, keybindings, and configuration documentation, refer to the main repository [README.md](../../README.md) or at https://github.com/lumidenoir/LuminaX.
