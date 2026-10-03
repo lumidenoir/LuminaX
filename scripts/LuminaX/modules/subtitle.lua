@@ -521,7 +521,7 @@ function M.apply_config(skip_save)
 end
 
 -- Apply an industry-standard style preset
-function M.apply_preset(preset_id)
+function M.apply_preset(preset_id, opts)
     local p = PRESETS[preset_id]
     if not p then return end
     config.preset = preset_id
@@ -531,7 +531,19 @@ function M.apply_preset(preset_id)
         end
     end
     M.apply_config()
-    mp.osd_message(string.format('%s  Preset: %s (%dpt)', p.icon or '✓', p.name, config.font_size), 2.0)
+    if opts and opts.silent then return end
+
+    if ctx_ref and ctx_ref.huds and ctx_ref.huds.show_pill then
+        ctx_ref.huds.show_pill({
+            key       = 'SUB PRESET',
+            val       = string.format('%s (%dpt)', p.name, config.font_size or 24),
+            icon      = '\238\129\136',
+            val_color = 'FFFFFF',
+            dur       = 2.0,
+        })
+    else
+        mp.osd_message(string.format('%s  Preset: %s (%dpt)', p.icon or '✓', p.name, config.font_size), 2.0)
+    end
 end
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -827,6 +839,20 @@ end
 
 function M.is_visible()
     return config.visible ~= false
+end
+
+-- Automatic Animation Detection Handler (Switches to Anime Fansub)
+function M.on_tmdb_loaded(data)
+    if not data or not data.genres then return end
+    local auto_opt = ctx_ref.user_opts and ctx_ref.user_opts.sub_auto_anime_preset
+    if auto_opt == false or auto_opt == 'no' or auto_opt == 'off' then return end
+
+    local g = tostring(data.genres):lower()
+    if g:find('animation') or g:find('anime') then
+        if config.preset ~= 'anime_outline' then
+            M.apply_preset('anime_outline')
+        end
+    end
 end
 
 -- ────────────────────────────────────────────────────────────────────────────

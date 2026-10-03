@@ -381,6 +381,52 @@ if mock_events['sub-text'] then
 end
 assert_true(true, 'Ultra-long line soft-wrapped cleanly within safe bounds')
 
+print('\n▶ 9. Testing HUD Toast for Presets & TMDB Animation Auto-Preset:')
+local last_hud_pill = nil
+local mock_huds = {
+    show_pill = function(opts)
+        last_hud_pill = opts
+    end
+}
+local mock_opts = { sub_auto_anime_preset = true }
+subtitle.init({
+    utils = utils,
+    osc_param = {playresx = 1280, playresy = 720},
+    request_tick = function() end,
+    huds = mock_huds,
+    user_opts = mock_opts,
+})
+
+-- Test HUD pill on apply_preset
+subtitle.apply_preset('cinema_gold')
+assert_true(last_hud_pill ~= nil, 'apply_preset triggered HUD pill')
+assert_equal(last_hud_pill.key, 'SUB PRESET', 'HUD pill key is SUB PRESET')
+assert_true(last_hud_pill.val:find('Theatrical Gold') ~= nil, 'HUD pill contains preset name')
+
+-- Test TMDB Animation detection
+local anim_data = {
+    show_name = 'Sentenced to Be a Hero',
+    genres = 'Animation  ·  Sci-Fi & Fantasy  ·  Action & Adventure'
+}
+subtitle.on_tmdb_loaded(anim_data)
+local curr_cfg = subtitle.get_config()
+assert_equal(curr_cfg.preset, 'anime_outline', 'Auto-applied Anime Fansub for Animation genre')
+assert_true(last_hud_pill.val:find('Anime Fansub') ~= nil, 'HUD notified Anime Fansub switch')
+
+-- Test Non-animation genre does not override
+subtitle.apply_preset('apple_tv')
+local drama_data = {
+    show_name = 'Succession',
+    genres = 'Drama'
+}
+subtitle.on_tmdb_loaded(drama_data)
+assert_equal(subtitle.get_config().preset, 'apple_tv', 'Non-animation genre preserves current preset')
+
+-- Test opt-out sub_auto_anime_preset=false
+mock_opts.sub_auto_anime_preset = false
+subtitle.on_tmdb_loaded(anim_data)
+assert_equal(subtitle.get_config().preset, 'apple_tv', 'Opt-out prevents auto-switching to Anime Fansub')
+
 print('\n' .. string.rep('=', 70))
 print(string.format('🎉 Subtitle Unit Suite Finished: %d / %d assertions passed', pass_count, test_count))
 print(string.rep('=', 70))

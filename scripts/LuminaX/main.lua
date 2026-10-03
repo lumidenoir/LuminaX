@@ -64,6 +64,11 @@ screensaver.init({
         return (menu and menu.is_active and menu.is_active()) or
                (tag_editor and tag_editor.is_active and tag_editor.is_active())
     end,
+    on_tmdb_loaded = function(data)
+        if subtitle and subtitle.on_tmdb_loaded then
+            subtitle.on_tmdb_loaded(data)
+        end
+    end,
 })
 
 -- 3. Initialize HUDs
