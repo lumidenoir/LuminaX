@@ -520,6 +520,9 @@ function M.apply_config(skip_save)
     if ctx_ref.request_tick then ctx_ref.request_tick() end
 end
 
+local user_base_preset = 'apple_tv'
+local auto_switched_anime = false
+
 -- Apply an industry-standard style preset
 function M.apply_preset(preset_id, opts)
     local p = PRESETS[preset_id]
@@ -530,7 +533,11 @@ function M.apply_preset(preset_id, opts)
             config[k] = v
         end
     end
-    M.apply_config()
+    local skip_save = opts and (opts.skip_save or opts.is_auto)
+    if not (opts and opts.is_auto) then
+        user_base_preset = preset_id
+    end
+    M.apply_config(skip_save)
     if opts and opts.silent then return end
 
     if ctx_ref and ctx_ref.huds and ctx_ref.huds.show_pill then
@@ -841,16 +848,26 @@ function M.is_visible()
     return config.visible ~= false
 end
 
--- Automatic Animation Detection Handler (Switches to Anime Fansub)
+-- Automatic Animation Detection Handler (Switches to Anime Fansub on anime, restores base preset on live action)
 function M.on_tmdb_loaded(data)
     if not data or not data.genres then return end
     local auto_opt = ctx_ref.user_opts and ctx_ref.user_opts.sub_auto_anime_preset
     if auto_opt == false or auto_opt == 'no' or auto_opt == 'off' then return end
 
     local g = tostring(data.genres):lower()
-    if g:find('animation') or g:find('anime') then
+    local is_anime = g:find('animation') or g:find('anime')
+
+    if is_anime then
         if config.preset ~= 'anime_outline' then
-            M.apply_preset('anime_outline')
+            auto_switched_anime = true
+            M.apply_preset('anime_outline', { skip_save = true, is_auto = true })
+        end
+    else
+        -- Non-anime title (e.g. live-action drama / comedy like Sheep Detective)
+        if auto_switched_anime or (config.preset == 'anime_outline' and user_base_preset ~= 'anime_outline') then
+            auto_switched_anime = false
+            local restore = (user_base_preset and user_base_preset ~= 'anime_outline') and user_base_preset or 'apple_tv'
+            M.apply_preset(restore, { skip_save = true, is_auto = true })
         end
     end
 end
@@ -872,6 +889,17 @@ function M.init(ctx)
     current_sub_scale = mp.get_property_number('sub-scale', 1.0)
 
     load_saved_config()
+
+    -- Reset temporary auto-switched anime preset when switching files
+    if mp.register_event then
+        mp.register_event('start-file', function()
+            if auto_switched_anime then
+                auto_switched_anime = false
+                local restore = (user_base_preset and user_base_preset ~= 'anime_outline') and user_base_preset or 'apple_tv'
+                M.apply_preset(restore, { skip_save = true, is_auto = true, silent = true })
+            end
+        end)
+    end
 
     -- Observe subtitle text changes
     mp.observe_property('sub-text', 'string', function(_, text)

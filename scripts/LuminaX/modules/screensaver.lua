@@ -224,6 +224,49 @@ local function wrap_lines(text, max_chars, max_lines)
     return table.concat(lines, '\\N'), math.max(1, #lines)
 end
 
+local function adaptive_scale_title(title, base_fs, base_max_chars, is_center)
+    if not title or title == '' then return '', 0, base_fs, math.floor(base_fs * 1.22) end
+    local cur_fs = base_fs
+    local min_2line_fs = math.floor(base_fs * 0.70)
+    local cur_max_chars = base_max_chars
+    local wrapped, lines = wrap_lines(title, cur_max_chars, 2)
+
+    -- Phase 1: Prioritize fitting within 2 lines first by scaling down font size (down to 70%)
+    if wrapped:match('%.%.%.$') then
+        while cur_fs > min_2line_fs do
+            cur_fs = cur_fs - 2
+            local scaled_max_chars = math.floor(base_max_chars * (base_fs / cur_fs) + 0.5)
+            local test_wrapped, test_lines = wrap_lines(title, scaled_max_chars, 2)
+            if not test_wrapped:match('%.%.%.$') then
+                wrapped = test_wrapped
+                lines = test_lines
+                cur_max_chars = scaled_max_chars
+                break
+            end
+        end
+    end
+
+    -- Phase 2: If it still overflows 2 lines at 70% (e.g. ultra-long light novels >80 chars),
+    -- expand to 3 lines and continue scaling down to 60%
+    if wrapped:match('%.%.%.$') then
+        local min_3line_fs = math.floor(base_fs * 0.60)
+        while cur_fs > min_3line_fs do
+            cur_fs = cur_fs - 2
+            local scaled_max_chars = math.floor(base_max_chars * (base_fs / cur_fs) + 0.5)
+            local test_wrapped, test_lines = wrap_lines(title, scaled_max_chars, 3)
+            wrapped = test_wrapped
+            lines = test_lines
+            cur_max_chars = scaled_max_chars
+            if not wrapped:match('%.%.%.$') then
+                break
+            end
+        end
+    end
+
+    local cur_lh = math.floor(cur_fs * 1.22)
+    return wrapped, lines, cur_fs, cur_lh
+end
+
 local function render_screensaver(alpha)
     -- alpha: 0=fully opaque, 255=fully transparent (ASS convention)
     if alpha >= 255 or (state and state.menu_active) then
@@ -364,15 +407,14 @@ local function render_screensaver(alpha)
     local title_font = (is_tv and user_opts.screensaver_tv_font) or user_opts.screensaver_film_font or user_opts.font or 'NewYork'
     local title_weight = is_movie and 600 or 700
     local base_fs = is_movie and math.floor(show_fs * 1.1) or show_fs
-    local title_fs = is_center and math.floor(base_fs * 1.5) or base_fs
-    local title_lh = math.floor(title_fs * 1.22)
-    local ep_lh = math.floor(ep_fs * 1.35)
-    local tag_lh = math.floor(tag_fs * 1.4)
+    local base_title_fs = is_center and math.floor(base_fs * 1.5) or base_fs
 
     local safe_show = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(show_name) or show_name
-    local title_max_chars = is_center and (tier == 3 and 28 or (tier == 2 and 24 or 20))
-                                      or (tier == 3 and 26 or (tier == 2 and 22 or 18))
-    local title_wrapped, title_lines = wrap_lines(safe_show, title_max_chars, 2)
+    local base_title_max_chars = is_center and (tier == 3 and 28 or (tier == 2 and 24 or 20))
+                                           or (tier == 3 and 26 or (tier == 2 and 22 or 18))
+    local title_wrapped, title_lines, title_fs, title_lh = adaptive_scale_title(safe_show, base_title_fs, base_title_max_chars, is_center)
+    local ep_lh = math.floor(ep_fs * 1.35)
+    local tag_lh = math.floor(tag_fs * 1.4)
 
     local safe_ep = utils_mod and utils_mod.ass_escape and utils_mod.ass_escape(ep_title) or ep_title
     local ep_max_chars = is_center and (tier == 3 and 58 or (tier == 2 and 48 or 40))
@@ -2238,6 +2280,7 @@ M.legacy_cache_filename     = legacy_cache_filename
 M.prune_cache_dir           = prune_cache_dir
 M.is_logo_disabled          = is_logo_disabled
 M.wrap_lines                = wrap_lines
+M.adaptive_scale_title      = adaptive_scale_title
 M.set_current               = set_tmdb_current
 M.render                    = render_screensaver
 

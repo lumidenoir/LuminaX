@@ -487,6 +487,27 @@ local nil_t, nil_lines = ss.wrap_lines(nil, 30, 2)
 assert_eq("Nil title returns 0 lines", nil_lines, 0)
 assert_eq("Nil title returns empty string", nil_t, "")
 
+print("\n=== 10. Testing Adaptive Title Font Scaling Algorithm ===")
+assert_true("adaptive_scale_title exported", type(ss.adaptive_scale_title) == 'function')
+
+local at_wrap, at_lines, at_fs = ss.adaptive_scale_title("Weathering with You", 44, 24, true)
+assert_eq("Short title keeps original font size", at_fs, 44)
+assert_true("No ellipsis for short title", at_wrap:find("%.%.%.$") == nil)
+
+local pic1_title = "An Observation Log of My Fiancée Who Calls Herself a Villainess"
+local p_wrap, p_lines, p_fs = ss.adaptive_scale_title(pic1_title, 44, 24, true)
+assert_true("Adaptive scale down font size for long title", p_fs < 44)
+assert_true("Adaptive title fits without ellipsis", p_wrap:find("%.%.%.$") == nil)
+assert_eq("Multi-line wrapping fits Pic 1 title in 2 lines", p_lines, 2)
+
+local mega_title = "I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Across All Realms"
+local m_wrap, m_lines, m_fs = ss.adaptive_scale_title(mega_title, 44, 24, true)
+assert_eq("Mega title uses 3 lines", m_lines, 3)
+assert_true("Mega title scales font size deeply", m_fs < 35)
+
+local e_wrap, e_lines, e_fs = ss.adaptive_scale_title("", 44, 24, true)
+assert_eq("Empty title returns 0 lines", e_lines, 0)
+
 print(string.format("\n========================================================"))
 print(string.format("Screensaver Robustness Suite: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))
 print(string.format("========================================================"))
