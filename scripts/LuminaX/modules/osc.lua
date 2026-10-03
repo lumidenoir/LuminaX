@@ -92,7 +92,7 @@ local user_opts = {
     volumecontrol = true,       -- whether to show mute button and volume slider
     volume_slider_mode = 'hover', -- volume slider appearance: 'hover' (default), 'always', 'never'
     keyboardnavigation = false, -- enable directional keyboard navigation
-    chapter_fmt = 'Chapter: %s',-- format for chapter name display on seekbar
+    chapter_fmt = '%s',         -- format for chapter name display on seekbar
     -- Adaptive Scaling Bounds
     min_scale = 0.70,           -- minimum adaptive scale factor (default 0.70)
     max_scale = 1.05,           -- maximum adaptive scale factor (default 1.05)
@@ -109,6 +109,15 @@ local user_opts = {
     check_updates = true,       -- auto check for LuminaX updates in background
     check_update_interval_days = 3, -- check frequency in days
     sub_auto_anime_preset = true, -- automatically switch to Anime Fansub subtitle preset when TMDB genre is Animation
+    -- Smart Skip & Next Episode Binge
+    smart_skip_mode = 'pill',   -- 'pill' (interactive floating pill), 'auto' (instant skip), 'no' (disabled)
+    smart_skip_series_only = true, -- only skip intros/outros for series/anime, preserving movie credits
+    chapter_zone_tinting = true, -- subtle seekbar range shading for intro (cyan) and outro (amber)
+    smart_skip_countdown = 6,   -- countdown in seconds for intro/outro skip button
+    smart_skip_bottom_margin = 170, -- constant vertical distance from bottom (keeps button above scrim & stationary)
+    next_episode_card = true,   -- show Next Episode binge card on outro/ending
+    next_episode_countdown = 10,-- countdown in seconds before auto-playing next episode
+    next_episode_threshold = 25,-- remaining playtime threshold in seconds for late-episode card trigger
 }
 
 -- Icons for jump button depending on jumpamount (Material Icons Round)
@@ -775,11 +784,13 @@ end
 
 -- returns nil or a chapter element from the native property chapter-list
 function get_chapter(possec)
+    possec = tonumber(possec)
     if not possec then return nil end
     local cl = state.chapter_list or {}
 
     for n=#cl,1,-1 do
-        if cl[n] and cl[n].time and possec >= cl[n].time then
+        local ct = cl[n] and tonumber(cl[n].time)
+        if ct and possec >= ct then
             return cl[n]
         end
     end
@@ -798,8 +809,11 @@ function render_elements(master_ass)
                 local possec = get_slider_value(se) * dur / 100 -- of mouse pos
                 local ch = get_chapter(possec)
                 if ch and ch.title and ch.title ~= "" then
+                    local clean_title = ch.title:gsub('^[Cc]hapter%s*:%s*', ''):gsub('^[Cc]hapter%s+(%d+%s*:%s*)', '')
+                    local fmt = user_opts.chapter_fmt or '%s'
+                    if fmt == 'Chapter: %s' or fmt == 'Chapter %s' then fmt = '%s' end
                     pcall(function()
-                        state.forced_title = string.format(user_opts.chapter_fmt or 'Chapter: %s', ch.title)
+                        state.forced_title = string.format(fmt, clean_title)
                     end)
                 end
             end
@@ -855,25 +869,18 @@ function render_elements(master_ass)
             
             local elem_geo = element.layout.geometry
             local elem_ass = assdraw.ass_new()
-            elem_ass:merge(style_ass)
+            if element.name ~= 'seekbar' and element.name ~= 'seekbarbg' then
+                elem_ass:merge(style_ass)
+            end
             
             if (element.name == 'seekbarbg') then
-                local anim = state.seekbar_anim or 0.0
-                local bar_h = 3.0 + 4.0 * anim
-                -- Centre the bar vertically inside the hitbox (same maths as the FG fill)
-                local bg_gap = (elem_geo.h - bar_h) / 2
-                elem_ass:draw_start()
-                -- Anchor bounding box to [0, 0, w, h] so libass \an5 centers at elem_geo.y (same hack as slider)
-                elem_ass:rect_cw(0, 0, elem_geo.w, elem_geo.h)
-                elem_ass:rect_ccw(0, 0, elem_geo.w, elem_geo.h)
-                elem_ass:round_rect_cw(0, bg_gap, elem_geo.w, elem_geo.h - bg_gap, bar_h / 2)
-                elem_ass:draw_stop()
+                -- Handled atomically in seekbar unified pipeline
             elseif (element.name == 'volumebarbg') then
                 local anim_w = (vmode == 'hover') and math.floor(elem_geo.w * (state.vol_anim or 1.0) + 0.5) or elem_geo.w
                 elem_ass:draw_start()
                 elem_ass:round_rect_cw(0, 0, anim_w, elem_geo.h, elem_geo.h / 2)
                 elem_ass:draw_stop()
-            elseif not (element.type == 'button') then
+            elseif not (element.type == 'button') and element.name ~= 'seekbar' and element.name ~= 'seekbarbg' then
                 elem_ass:merge(element.static_ass)
             end
 
@@ -886,46 +893,350 @@ function render_elements(master_ass)
                 local pos = element.slider.posF()
 
                 if element.name == 'seekbar' then
-                    local anim = state.seekbar_anim or 0.0
-                    local bar_h = 3.0 + 4.0 * anim
-                    local gap = (elem_geo.h - bar_h) / 2
-                    local rh = (user_opts.seekbarhandlesize * elem_geo.h / 2) * (0.35 + 0.65 * anim)
-                    local xp = pos and get_slider_ele_pos_for(element, pos) or nil
-
-                    local loop_a = mp.get_property_number('ab-loop-a')
-                    local loop_b = mp.get_property_number('ab-loop-b')
+                    local x0 = element.hitbox.x1
+                    local w = element.hitbox.x2 - element.hitbox.x1
+                    local cy = element.layout.geometry.y
                     local dur = mp.get_property_number('duration', 0)
-                    local has_loop = loop_a and dur and dur > 0 and loop_a >= 0
+                    local cur_pos = mp.get_property_number('time-pos', 0) or 0
+                    local anim = state.seekbar_anim or 0.0
 
-                    if not has_loop then
-                        if xp then
-                            ass_draw_cir_cw(elem_ass, xp, elem_geo.h / 2, rh)
-                            elem_ass:round_rect_cw(0, gap, xp, elem_geo.h - gap, bar_h / 2)
-                        end
-                    else
-                        local ax = get_slider_ele_pos_for(element, math.min(100, math.max(0, (loop_a / dur) * 100)))
-                        local bx = (loop_b and loop_b > 0) and get_slider_ele_pos_for(element, math.min(100, math.max(0, (loop_b / dur) * 100))) or nil
+                    local base_h = 3.5
+                    local hover_h = 7.0
+                    local bar_h = base_h + ((hover_h - base_h) * anim)
+                    local y1 = cy - (bar_h / 2)
+                    local y2 = cy + (bar_h / 2)
+                    local r = bar_h / 2
 
-                        -- White played progress stops cleanly at Point A
-                        if xp and xp > 0 then
-                            local white_end = math.min(xp, ax)
-                            if white_end > 0 then
-                                elem_ass:round_rect_cw(0, gap, white_end, elem_geo.h - gap, bar_h / 2)
+                    local function to_x(t)
+                        local num_t = tonumber(t)
+                        if not dur or dur <= 0 or not num_t then return x0 end
+                        local progress = math.max(0.0, math.min(1.0, num_t / dur))
+                        return x0 + (progress * w)
+                    end
+
+                    -- Pre-calculate OP / ED Chapter Zones & Inline Boundary Diamonds
+                    local zone_boundaries = {}
+                    local zones = {}
+                    if user_opts.chapter_zone_tinting ~= false and ctx_ref.smart_skip and ctx_ref.smart_skip.get_chapter_zones then
+                        local raw_zones = ctx_ref.smart_skip.get_chapter_zones()
+                        if raw_zones and #raw_zones > 0 and dur and dur > 0 then
+                            for _, z in ipairs(raw_zones) do
+                                local zx1 = math.max(x0, to_x(z.start_sec))
+                                local zx2 = math.min(x0 + w, to_x(z.end_sec))
+                                if zx2 > zx1 + 1.0 then
+                                    local z_color = (z.type == 'intro' or z.type == 'recap') and 'FFD060' or '30A0FF'
+                                    table.insert(zones, { x1 = zx1, x2 = zx2, color = z_color, type = z.type })
+                                    table.insert(zone_boundaries, { x = zx1, color = z_color })
+                                    table.insert(zone_boundaries, { x = zx2, color = z_color })
+                                end
                             end
                         end
-                        -- White handle circle if playhead is before Point A
-                        if xp and xp <= ax then
-                            ass_draw_cir_cw(elem_ass, xp, elem_geo.h / 2, rh)
-                        end
+                    end
 
-                        loop_seekbar_data = {
-                            element = element,
-                            bar_h = bar_h,
-                            rh = rh,
-                            ax = ax,
-                            bx = bx,
-                            xp = xp,
-                        }
+                    -- Deduplicate & sort zone boundaries
+                    table.sort(zone_boundaries, function(a, b) return a.x < b.x end)
+                    local dedup_boundaries = {}
+                    for _, zb in ipairs(zone_boundaries) do
+                        if #dedup_boundaries == 0 or math.abs(zb.x - dedup_boundaries[#dedup_boundaries].x) > 2.0 then
+                            table.insert(dedup_boundaries, zb)
+                        end
+                    end
+                    zone_boundaries = dedup_boundaries
+
+                    local dr = 2.8 + (1.4 * anim)
+                    local gap_r = dr + 2.0
+
+                    -- Filter valid chapters
+                    local raw_chapters = state.chapter_list or mp.get_property_native('chapter-list', {})
+                    local valid_chapters = {}
+                    if type(raw_chapters) == 'table' and dur and dur > 0 then
+                        for _, ch in ipairs(raw_chapters) do
+                            if type(ch) == 'table' then
+                                local ct = tonumber(ch.time)
+                                if ct and ct > 0.5 and ct < dur - 0.5 then
+                                    table.insert(valid_chapters, { time = ct, title = ch.title })
+                                end
+                            end
+                        end
+                    end
+                    local num_chapters = #valid_chapters
+
+                    -- Calculate physical segment disconnects:
+                    -- 1. Always create physical voids around OP/ED floating diamonds (±gap_r)
+                    -- 2. If < 12 chapters: create YouTube-style floating bar voids (±1.2px) at chapter cuts
+                    -- 3. If >= 12 chapters: keep seekbar continuous across chapters; render Apple TV micro hairline notches instead
+                    local raw_voids = {}
+                    for _, zb in ipairs(zone_boundaries) do
+                        table.insert(raw_voids, { x1 = math.max(x0, zb.x - gap_r), x2 = math.min(x0 + w, zb.x + gap_r) })
+                    end
+
+                    if num_chapters < 12 then
+                        local ch_gap = 1.2
+                        for _, ch in ipairs(valid_chapters) do
+                            local cx = to_x(ch.time)
+                            local near_diamond = false
+                            for _, zb in ipairs(zone_boundaries) do
+                                if math.abs(cx - zb.x) <= gap_r + 2.0 then
+                                    near_diamond = true
+                                    break
+                                end
+                            end
+                            if not near_diamond then
+                                table.insert(raw_voids, { x1 = math.max(x0, cx - ch_gap), x2 = math.min(x0 + w, cx + ch_gap) })
+                            end
+                        end
+                    end
+
+                    table.sort(raw_voids, function(a, b) return a.x1 < b.x1 end)
+                    local voids = {}
+                    for _, v in ipairs(raw_voids) do
+                        if #voids > 0 and v.x1 <= voids[#voids].x2 + 0.5 then
+                            voids[#voids].x2 = math.max(voids[#voids].x2, v.x2)
+                        else
+                            table.insert(voids, { x1 = v.x1, x2 = v.x2 })
+                        end
+                    end
+
+                    local segments = {}
+                    local cur_seg_x = x0
+                    for _, v in ipairs(voids) do
+                        if v.x1 > cur_seg_x + 1.0 then
+                            local mid = (cur_seg_x + v.x1) / 2
+                            local z_color = nil
+                            for _, z in ipairs(zones) do
+                                if mid >= z.x1 and mid <= z.x2 then
+                                    z_color = z.color
+                                    break
+                                end
+                            end
+                            table.insert(segments, { x1 = cur_seg_x, x2 = v.x1, is_zone = (z_color ~= nil), color = z_color })
+                        end
+                        cur_seg_x = math.max(cur_seg_x, v.x2)
+                    end
+                    if cur_seg_x < x0 + w - 1.0 then
+                        local mid = (cur_seg_x + (x0 + w)) / 2
+                        local z_color = nil
+                        for _, z in ipairs(zones) do
+                            if mid >= z.x1 and mid <= z.x2 then
+                                z_color = z.color
+                                break
+                            end
+                        end
+                        table.insert(segments, { x1 = cur_seg_x, x2 = x0 + w, is_zone = (z_color ~= nil), color = z_color })
+                    end
+                    if #segments == 0 then
+                        table.insert(segments, { x1 = x0, x2 = x0 + w, is_zone = false })
+                    end
+
+                    -- 1. Base Background Groove (Segmented with physical gaps)
+                    elem_ass:new_event()
+                    elem_ass:pos(0, 0)
+                    elem_ass:an(7)
+                    elem_ass:append('{\\bord0\\shad0\\1c&H202022&\\1a&H40&}')
+                    elem_ass:draw_start()
+                    for _, seg in ipairs(segments) do
+                        elem_ass:round_rect_cw(seg.x1, y1, seg.x2, y2, r)
+                    end
+                    elem_ass:draw_stop()
+
+                    -- 2. Demuxer Cache / Buffer Fill
+                    local cache_end = mp.get_property_number('demuxer-cache-time')
+                    if cache_end and dur and dur > 0 and cache_end > 0 then
+                        local cache_x = to_x(cache_end)
+                        if cache_x > x0 then
+                            elem_ass:new_event()
+                            elem_ass:pos(0, 0)
+                            elem_ass:an(7)
+                            elem_ass:append('{\\bord0\\shad0\\1c&HFFFFFF&\\1a&HD0&}')
+                            elem_ass:draw_start()
+                            for _, seg in ipairs(segments) do
+                                if cache_x > seg.x1 then
+                                    local bx2 = math.min(seg.x2, cache_x)
+                                    if bx2 > seg.x1 + 0.5 then
+                                        elem_ass:round_rect_cw(seg.x1, y1, bx2, y2, r)
+                                    end
+                                end
+                            end
+                            elem_ass:draw_stop()
+                        end
+                    end
+
+                    -- 3. OP / ED Chapter Tints (Segmented ribbon inside zone)
+                    for _, seg in ipairs(segments) do
+                        if seg.is_zone and seg.color then
+                            elem_ass:new_event()
+                            elem_ass:pos(0, 0)
+                            elem_ass:an(7)
+                            elem_ass:append(string.format('{\\bord0\\shad0\\1c&H%s&\\1a&H90&}', seg.color))
+                            elem_ass:draw_start()
+                            elem_ass:round_rect_cw(seg.x1, y1, seg.x2, y2, r)
+                            elem_ass:draw_stop()
+                        end
+                    end
+
+                    -- 4. A-B Loop Region Fill
+                    local loop_a = mp.get_property_number('ab-loop-a')
+                    local loop_b = mp.get_property_number('ab-loop-b')
+                    local has_loop = loop_a and dur and dur > 0 and loop_a >= 0
+                    if has_loop then
+                        local ax1 = to_x(loop_a)
+                        local ax2 = (loop_b and loop_b > 0) and to_x(loop_b) or to_x(cur_pos)
+                        if ax2 > ax1 + 0.5 then
+                            elem_ass:new_event()
+                            elem_ass:pos(0, 0)
+                            elem_ass:an(7)
+                            elem_ass:append('{\\bord0\\shad0\\1c&HFF8844&\\1a&H80&}')
+                            elem_ass:draw_start()
+                            for _, seg in ipairs(segments) do
+                                if ax2 > seg.x1 and ax1 < seg.x2 then
+                                    local lx1 = math.max(seg.x1, ax1)
+                                    local lx2 = math.min(seg.x2, ax2)
+                                    if lx2 > lx1 + 0.5 then
+                                        elem_ass:round_rect_cw(lx1, y1, lx2, y2, r)
+                                    end
+                                end
+                            end
+                            elem_ass:draw_stop()
+                        end
+                    end
+
+                    -- 5. Playback Fill Bar (Progress across segments)
+                    local cur_x = to_x(cur_pos)
+                    if cur_x > x0 then
+                        local play_end = cur_x
+                        if has_loop and cur_pos > loop_a then
+                            play_end = math.min(cur_x, to_x(loop_a))
+                        end
+                        if play_end > x0 then
+                            elem_ass:new_event()
+                            elem_ass:pos(0, 0)
+                            elem_ass:an(7)
+                            elem_ass:append('{\\bord0\\shad0\\1c&HFFFFFF&\\1a&H00&}')
+                            elem_ass:draw_start()
+                            for _, seg in ipairs(segments) do
+                                if play_end > seg.x1 then
+                                    local px2 = math.min(seg.x2, play_end)
+                                    if px2 > seg.x1 + 0.5 then
+                                        elem_ass:round_rect_cw(seg.x1, y1, px2, y2, r)
+                                    end
+                                end
+                            end
+                            elem_ass:draw_stop()
+                        end
+                        if has_loop and cur_pos > loop_a then
+                            local loop_played = (loop_b and loop_b > 0) and math.min(to_x(loop_b), cur_x) or cur_x
+                            local ax = to_x(loop_a)
+                            if loop_played > ax + 0.5 then
+                                elem_ass:new_event()
+                                elem_ass:pos(0, 0)
+                                elem_ass:an(7)
+                                elem_ass:append('{\\bord0\\shad0\\1c&H00A5FF&\\1a&H00&}')
+                                elem_ass:draw_start()
+                                for _, seg in ipairs(segments) do
+                                    if loop_played > seg.x1 and ax < seg.x2 then
+                                        local lx1 = math.max(seg.x1, ax)
+                                        local lx2 = math.min(seg.x2, loop_played)
+                                        if lx2 > lx1 + 0.5 then
+                                            elem_ass:round_rect_cw(lx1, y1, lx2, y2, r)
+                                        end
+                                    end
+                                end
+                                elem_ass:draw_stop()
+                            end
+                        end
+                    end
+
+                    -- 6. Chapter Boundary Indicators
+                    -- When >= 12 chapters: Apple TV style micro hairline glass notches (etched 1px slits)
+                    -- When < 12 chapters: YouTube style floating bars (the physical gaps themselves form the chapter separation)
+                    if num_chapters >= 12 then
+                        for _, ch in ipairs(valid_chapters) do
+                            local cx = to_x(ch.time)
+                            local in_gap = false
+                            for _, zb in ipairs(zone_boundaries) do
+                                if math.abs(cx - zb.x) <= gap_r + 1.0 then
+                                    in_gap = true
+                                    break
+                                end
+                            end
+                            if not in_gap then
+                                elem_ass:new_event()
+                                elem_ass:pos(0, 0)
+                                elem_ass:an(7)
+                                elem_ass:append('{\\bord0\\shad0\\1c&HFFFFFF&\\1a&HB8&}')
+                                elem_ass:draw_start()
+                                elem_ass:rect_cw(cx - 0.5, y1, cx + 0.5, y2)
+                                elem_ass:draw_stop()
+                            end
+                        end
+                    end
+
+
+                    -- 7. OP / ED Seanime-Style Inline Diamond Pins (Floating in between segments)
+                    if #zone_boundaries > 0 then
+                        for _, zb in ipairs(zone_boundaries) do
+                            elem_ass:new_event()
+                            elem_ass:pos(0, 0)
+                            elem_ass:an(7)
+                            elem_ass:append(string.format('{\\blur0\\bord0.8\\3c&H0A0A0E&\\3a&H40&\\1c&H%s&\\1a&H00&}', zb.color))
+                            elem_ass:draw_start()
+                            elem_ass:move_to(zb.x, cy - dr)
+                            elem_ass:line_to(zb.x + dr, cy)
+                            elem_ass:line_to(zb.x, cy + dr)
+                            elem_ass:line_to(zb.x - dr, cy)
+                            elem_ass:draw_stop()
+                        end
+                    end
+
+
+                    -- 8. A-B Loop Flag Pins (Points A & B)
+                    if has_loop then
+                        local pin_w = 2.0
+                        local pin_y1 = y1 - 2.5
+                        local pin_y2 = y2 + 2.5
+                        local ax = to_x(loop_a)
+                        elem_ass:new_event()
+                        elem_ass:pos(0, 0)
+                        elem_ass:an(7)
+                        elem_ass:append('{\\bord0\\shad0\\1c&HFFCC00&\\1a&H00&}')
+                        elem_ass:draw_start()
+                        elem_ass:round_rect_cw(ax - (pin_w / 2), pin_y1, ax + (pin_w / 2), pin_y2, 1)
+                        elem_ass:draw_stop()
+
+                        local lbl_style = string.format('{\\blur0\\bord0.4\\1c&H00D7FF&\\3c&H003366&\\fs9\\b700\\fn%s}', user_opts.font)
+                        elem_ass:new_event()
+                        elem_ass:pos(ax, pin_y1 - 1)
+                        elem_ass:an(2)
+                        elem_ass:append(lbl_style .. 'A')
+
+                        if loop_b and loop_b > 0 then
+                            local bx = to_x(loop_b)
+                            elem_ass:new_event()
+                            elem_ass:pos(0, 0)
+                            elem_ass:an(7)
+                            elem_ass:append('{\\bord0\\shad0\\1c&HFFCC00&\\1a&H00&}')
+                            elem_ass:draw_start()
+                            elem_ass:round_rect_cw(bx - (pin_w / 2), pin_y1, bx + (pin_w / 2), pin_y2, 1)
+                            elem_ass:draw_stop()
+
+                            elem_ass:new_event()
+                            elem_ass:pos(bx, pin_y1 - 1)
+                            elem_ass:an(2)
+                            elem_ass:append(lbl_style .. 'B')
+                        end
+                    end
+
+                    -- 9. Scrub Knob
+                    if cur_x and (anim > 0.05 or user_opts.seekbarhandlesize > 0) then
+                        local knob_r = (user_opts.seekbarhandlesize * elem_geo.h / 2) * (0.35 + 0.65 * anim)
+                        if knob_r < bar_h * 0.95 then knob_r = bar_h * 0.95 end
+                        elem_ass:new_event()
+                        elem_ass:pos(0, 0)
+                        elem_ass:an(7)
+                        elem_ass:append('{\\bord1.2\\3c&H000000&\\3a&H80&\\1c&HFFFFFF&\\1a&H00&}')
+                        elem_ass:draw_start()
+                        ass_draw_cir_cw(elem_ass, cur_x, cy, knob_r)
+                        elem_ass:draw_stop()
                     end
                 else
                     local rh = user_opts.seekbarhandlesize * elem_geo.h / 2
@@ -938,9 +1249,8 @@ function render_elements(master_ass)
                         ass_draw_cir_cw(elem_ass, xp, elem_geo.h/2, rh)
                         elem_ass:rect_cw(0, slider_lo.gap, xp, elem_geo.h - slider_lo.gap)
                     end
+                    elem_ass:draw_stop()
                 end
-
-                elem_ass:draw_stop()
             
             -- add tooltip
             if not (element.slider.tooltipF == nil) then
@@ -1019,12 +1329,15 @@ function render_elements(master_ass)
                                     local possec = get_slider_value(se) * dur / 100 -- of mouse pos
                                     local ch = get_chapter(possec)
                                     if ch and ch.title and ch.title ~= "" then
+                                        local clean_title = ch.title:gsub('^[Cc]hapter%s*:%s*', ''):gsub('^[Cc]hapter%s+(%d+%s*:%s*)', '')
+                                        local fmt = user_opts.chapter_fmt or '%s'
+                                        if fmt == 'Chapter: %s' or fmt == 'Chapter %s' then fmt = '%s' end
                                         elem_ass:new_event()
                                         elem_ass:pos((thumbX + thumbfast.width / 2) * r_w, thumbY * r_h - tooltip_font_size)
                                         elem_ass:an(an)
                                         elem_ass:append(slider_lo.tooltip_style)
                                         ass_append_alpha(elem_ass, slider_lo.alpha, 0)
-                                        local ok_fmt, formatted = pcall(string.format, user_opts.chapter_fmt or 'Chapter: %s', ch.title)
+                                        local ok_fmt, formatted = pcall(string.format, fmt, clean_title)
                                         if ok_fmt and formatted then
                                             elem_ass:append(formatted)
                                         end
@@ -1105,85 +1418,6 @@ function render_elements(master_ass)
 
         master_ass:merge(elem_ass)
 
-        if loop_seekbar_data and element.name == 'seekbar' then
-            local ld = loop_seekbar_data
-            local sb_x0 = ld.element.hitbox.x1
-            local center_y = ld.element.layout.geometry.y
-            local y1 = center_y - ld.bar_h / 2
-            local y2 = center_y + ld.bar_h / 2
-            local ax_s = sb_x0 + ld.ax
-            local bx_s = ld.bx and (sb_x0 + ld.bx) or nil
-            local cur_x_s = ld.xp and (sb_x0 + ld.xp) or nil
-
-            local ab_ass = assdraw.ass_new()
-
-            -- 1. Translucent amber loop track across entire [A, B] window
-            if bx_s and (bx_s - ax_s) > 0.5 then
-                ab_ass:new_event()
-                ab_ass:pos(0, 0)
-                ab_ass:an(7)
-                ab_ass:append('{\\blur0\\bord0\\1c&H00A5FF&\\1a&H90&}')
-                ab_ass:draw_start()
-                ab_ass:round_rect_cw(ax_s, y1, bx_s, y2, ld.bar_h / 2)
-                ab_ass:draw_stop()
-            end
-
-            -- 2. Solid vibrant amber fill for played portion inside loop
-            if cur_x_s and cur_x_s > ax_s then
-                local played_end = bx_s and math.min(bx_s, cur_x_s) or cur_x_s
-                if (played_end - ax_s) > 0.5 then
-                    ab_ass:new_event()
-                    ab_ass:pos(0, 0)
-                    ab_ass:an(7)
-                    ab_ass:append('{\\blur0\\bord0\\1c&H00A5FF&\\1a&H00&}')
-                    ab_ass:draw_start()
-                    ab_ass:round_rect_cw(ax_s, y1, played_end, y2, ld.bar_h / 2)
-                    ab_ass:draw_stop()
-                end
-            end
-
-            -- 3. Gold loop node cap markers (Point A and Point B)
-            local node_r = (ld.bar_h / 2) + 2.0
-            ab_ass:new_event()
-            ab_ass:pos(0, 0)
-            ab_ass:an(7)
-            ab_ass:append('{\\blur0\\bord0.5\\1c&H00D7FF&\\3c&H004488&\\1a&H00&\\3a&H20&}')
-            ab_ass:draw_start()
-            ass_draw_cir_cw(ab_ass, ax_s, center_y, node_r)
-            if bx_s then
-                ass_draw_cir_cw(ab_ass, bx_s, center_y, node_r)
-            end
-            ab_ass:draw_stop()
-
-            -- 3b. "A" / "B" micro-labels above each node marker
-            local lbl_style = '{\\blur0\\bord0.4\\1c&H00D7FF&\\3c&H003366&\\fs7\\b700\\fn' .. user_opts.font .. '}'
-            local lbl_y = y1 - 2  -- just above the bar
-            ab_ass:new_event()
-            ab_ass:pos(ax_s, lbl_y)
-            ab_ass:an(2)
-            ab_ass:append(lbl_style .. 'A')
-            if bx_s then
-                ab_ass:new_event()
-                ab_ass:pos(bx_s, lbl_y)
-                ab_ass:an(2)
-                ab_ass:append(lbl_style .. 'B')
-            end
-
-            -- 4. White playhead handle circle if inside or past loop Point A
-            if cur_x_s and cur_x_s > ax_s then
-                ab_ass:new_event()
-                ab_ass:pos(0, 0)
-                ab_ass:an(7)
-                ab_ass:append('{\\blur0\\bord0\\1c&HFFFFFF&\\1a&H00&}')
-                ab_ass:draw_start()
-                ass_draw_cir_cw(ab_ass, cur_x_s, center_y, ld.rh)
-                ab_ass:draw_stop()
-            end
-
-            master_ass:merge(ab_ass)
-            loop_seekbar_data = nil
-        end
-
 
         end
     end
@@ -1201,13 +1435,13 @@ function limited_list(prop, pos)
         return count, proplist
     end
 
-    local fs = tonumber(mp.get_property('options/osd-font-size'))
-    local max = math.ceil(osc_param.unscaled_y*0.75 / fs)
+    local fs = tonumber(mp.get_property('options/osd-font-size')) or tonumber(mp.get_property('osd-font-size')) or 32
+    local max = math.ceil(osc_param.unscaled_y*0.75 / math.max(1, fs))
     if max % 2 == 0 then
         max = max - 1
     end
     local delta = math.ceil(max / 2) - 1
-    local begi = math.max(math.min(pos - delta, count - max + 1), 1)
+    local begi = math.max(math.min((pos or 1) - delta, count - max + 1), 1)
     local endi = math.min(begi + max - 1, count)
 
     local reslist = {}
@@ -1238,8 +1472,7 @@ function get_playlist()
             if title == nil then
                 title = filename or ''
             end
-            message = string.format('%s %s %s\n', message,
-                (v.current and '●' or '○'), title)
+            message = message .. string.format('%s %s\n', (v.current and '●' or '○'), title)
         end
     end
     return message
@@ -1275,7 +1508,8 @@ function show_message(text, duration)
 
     --print('text: '..text..'   duration: ' .. duration)
     if duration == nil then
-        duration = tonumber(mp.get_property('options/osd-duration')) / 1000
+        local dur_prop = tonumber(mp.get_property('options/osd-duration')) or tonumber(mp.get_property('osd-duration')) or 2000
+        duration = dur_prop / 1000
     elseif not type(duration) == 'number' then
         print('duration: ' .. duration)
     end
@@ -1304,9 +1538,9 @@ function render_message(ass)
     then
         local _, lines = string.gsub(state.message_text, '\\N', '')
 
-        local fontsize = tonumber(mp.get_property('options/osd-font-size'))
-        local outline = tonumber(mp.get_property('options/osd-border-size'))
-        local maxlines = math.ceil(osc_param.unscaled_y*0.75 / fontsize)
+        local fontsize = tonumber(mp.get_property('options/osd-font-size')) or tonumber(mp.get_property('osd-font-size')) or 28
+        local outline = tonumber(mp.get_property('options/osd-border-size')) or tonumber(mp.get_property('osd-border-size')) or 2
+        local maxlines = math.ceil(osc_param.unscaled_y*0.75 / math.max(1, fontsize))
         local counterscale = osc_param.playresy / osc_param.unscaled_y
 
         fontsize = fontsize * counterscale / math.max(0.65 + math.min(lines/maxlines, 1), 1)
@@ -1314,13 +1548,13 @@ function render_message(ass)
 
         local style = '{\\bord' .. outline .. '\\fs' .. fontsize .. '}'
 
-
         ass:new_event()
         ass:append(style .. state.message_text)
     else
         state.message_text = nil
     end
 end
+
 
 --
 -- Initialisation and Layout
@@ -2995,6 +3229,14 @@ function process_event(source, what)
         end
         return
     end
+
+    if (what == 'up' or what == 'press') and ctx_ref.smart_skip and ctx_ref.smart_skip.handle_mouse_click then
+        local vx, vy = get_virt_mouse_pos()
+        if ctx_ref.smart_skip.handle_mouse_click(vx, vy) then
+            return
+        end
+    end
+
     local action = string.format('%s%s', source,
         what and ('_' .. what) or '')
 

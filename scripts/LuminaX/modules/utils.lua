@@ -146,10 +146,16 @@ function M.parse_clean_title(media_title, filename, filepath)
     raw = raw:gsub('^%s*www%.[%w%-_]+%.%a+[%s%-_]*', '')
     raw = raw:gsub('^%s*%b[][%s%-_]*', '')
 
-    -- 1. TV Episode patterns: S01E05, S1E1, etc.
+    -- 1. TV Episode patterns: S01E05, S1E1, 1x05, 01x05
     local s, e = raw:match('[Ss](%d+)[%s%.%-_]*[Ee](%d+)')
+    if not (s and e) then
+        s, e = raw:match('^.-[%s%.%-_%(%[](%d+)x(%d+)[%s%.%-_%)%]]')
+        if not (s and e) then
+            s, e = raw:match('^.-[%s%.%-_%(%[](%d+)x(%d+)$')
+        end
+    end
     if s and e then
-        local show = raw:match('^(.-)[%s%.%-_]+[Ss]%d+') or ''
+        local show = raw:match('^(.-)[%s%.%-_]+[Ss]%d+') or raw:match('^(.-)[%s%.%-_]+%d+x%d+') or ''
         show = show:gsub('%.', ' '):gsub('_', ' '):gsub('%b[]', ''):gsub('%b()', ''):gsub('[%s%-]+$', '')
         show = show:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
         if #show <= 3 and filepath then
@@ -170,6 +176,12 @@ function M.parse_clean_title(media_title, filename, filepath)
     -- If user set a title tag (media_title) without S02E02, check filename for S02E02!
     if has_tag and filename then
         local fn_s, fn_e = filename:match('[Ss](%d+)[%s%.%-_]*[Ee](%d+)')
+        if not (fn_s and fn_e) then
+            fn_s, fn_e = filename:match('^.-[%s%.%-_%(%[](%d+)x(%d+)[%s%.%-_%)%]]')
+            if not (fn_s and fn_e) then
+                fn_s, fn_e = filename:match('^.-[%s%.%-_%(%[](%d+)x(%d+)$')
+            end
+        end
         if fn_s and fn_e then
             local clean_tag = media_title:gsub('%.%w+$', ''):gsub('%b[]', ''):gsub('%b()', ''):gsub('`', "'")
             clean_tag = clean_tag:gsub('^[Ss]%d+[Ee]%d+.*$', ''):gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
@@ -183,34 +195,52 @@ function M.parse_clean_title(media_title, filename, filepath)
         end
     end
 
-    -- 2. Anime / Episode single-number pattern: "Title - 12 (1080p)" or "Title 2nd Season - 01"
-    local anime_title, ep_num = raw:match('^(.-)%s*-%s*(%d%d?)%s*[%s%(%[]')
-    if not anime_title then
-        anime_title, ep_num = raw:match('^(.-)%s*-%s*(%d%d?)%s*$')
+    -- 2. Standalone EP/E format: "Show Name EP05" or "Show Name E12"
+    local ep_only = raw:match('[%s%.%-_%(%[][Ee][Pp]?%.?(%d+)[%s%.%-_%)%]]')
+    if not ep_only then
+        ep_only = raw:match('[%s%.%-_%(%[][Ee][Pp]?%.?(%d+)$')
     end
-    if anime_title and ep_num and not anime_title:match('[12]%d%d%d') then
-        anime_title = anime_title:gsub('%.', ' '):gsub('_', ' '):gsub('%b[]', ''):gsub('%b()', ''):gsub('[%s%-]+$', '')
-        anime_title = anime_title:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
-        if #anime_title > 1 then
-            -- Extract explicit season numbering if present: "Sousou no Frieren 2nd Season" -> S2, "Show Season 3" -> S3
-            local base_show, s_ord = anime_title:match('^(.-)%s+(%d+)%a%a%s+[Ss]eason%s*$')
-            if not base_show then
-                base_show, s_ord = anime_title:match('^(.-)%s+[Ss]eason%s+(%d+)%s*$')
-            end
-            if not base_show then
-                base_show, s_ord = anime_title:match('^(.-)%s+[Ss](%d+)%s*$')
-            end
-            local season = s_ord and tonumber(s_ord) or 1
-            local final_show = base_show or anime_title
-            final_show = final_show:gsub('[%s%-]+$', ''):gsub('%s+', ' ')
-            if #final_show <= 10 and filepath then
-                local f_title, f_season = parse_parent_folder(filepath)
-                if f_title then
-                    final_show = f_title
-                    if f_season then season = f_season end
+    if ep_only then
+        local show = raw:match('^(.-)[%s%.%-_]+[Ee][Pp]?%.?%d+') or ''
+        show = show:gsub('%.', ' '):gsub('_', ' '):gsub('%b[]', ''):gsub('%b()', ''):gsub('[%s%-]+$', '')
+        show = show:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
+        if #show > 1 then
+            return show:sub(1, 60), nil, tonumber(ep_only), nil
+        end
+    end
+
+    -- 3. Anime / Episode single-number pattern: "Title - 12 (1080p)", "Bleach - 366", "Title 2nd Season - 01"
+    local anime_title, ep_num = raw:match('^(.-)%s*-%s*(%d+)%s*[%s%(%[]')
+    if not anime_title then
+        anime_title, ep_num = raw:match('^(.-)%s*-%s*(%d+)%s*$')
+    end
+    if anime_title and ep_num then
+        local num_val = tonumber(ep_num)
+        local is_year = (num_val and num_val >= 1888 and num_val <= 2035 and #ep_num == 4)
+        if not is_year then
+            anime_title = anime_title:gsub('%.', ' '):gsub('_', ' '):gsub('%b[]', ''):gsub('%b()', ''):gsub('[%s%-]+$', '')
+            anime_title = anime_title:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
+            if #anime_title > 1 then
+                -- Extract explicit season numbering if present: "Sousou no Frieren 2nd Season" -> S2, "Show Season 3" -> S3
+                local base_show, s_ord = anime_title:match('^(.-)%s+(%d+)%a%a%s+[Ss]eason%s*$')
+                if not base_show then
+                    base_show, s_ord = anime_title:match('^(.-)%s+[Ss]eason%s+(%d+)%s*$')
                 end
+                if not base_show then
+                    base_show, s_ord = anime_title:match('^(.-)%s+[Ss](%d+)%s*$')
+                end
+                local season = s_ord and tonumber(s_ord) or nil
+                local final_show = base_show or anime_title
+                final_show = final_show:gsub('[%s%-]+$', ''):gsub('%s+', ' ')
+                if #final_show <= 10 and filepath then
+                    local f_title, f_season = parse_parent_folder(filepath)
+                    if f_title then
+                        final_show = f_title
+                        if f_season then season = f_season end
+                    end
+                end
+                return final_show:sub(1, 60), season or 1, tonumber(ep_num), nil
             end
-            return final_show:sub(1, 60), season, tonumber(ep_num), nil
         end
     end
 
@@ -267,6 +297,68 @@ function M.parse_clean_title(media_title, filename, filepath)
     clean = clean:gsub('[%s%._%-]+[vV]%d+[%s%._%-]*$', '')
     clean = clean:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
     return clean:sub(1, 60), nil, nil, pre_year
+end
+
+-- Resolves standardized episode notation: "S01E03" or "Episode 04", or nil if not an episodic release
+function M.resolve_episode_label(media_title, filename, filepath)
+    local show, s, e = M.parse_clean_title(media_title, filename, filepath)
+    if not e then return nil, show, nil, nil end
+
+    local raw = (media_title and media_title ~= '') and media_title or (filename or '')
+    local has_explicit_season = raw:match('[Ss]%d+[%s%.%-_]*[Ee]%d+')
+        or raw:match('^.-[%s%.%-_%(%[](%d+)x(%d+)')
+        or raw:match('[Ss]eason%s*%d+')
+        or raw:match('%d+%a%a%s+[Ss]eason')
+        or (s and s > 1)
+
+    if has_explicit_season and s then
+        return string.format('S%02dE%02d', tonumber(s), tonumber(e)), show, tonumber(s), tonumber(e)
+    else
+        return string.format('Episode %02d', tonumber(e)), show, tonumber(s or 1), tonumber(e)
+    end
+end
+
+-- Matches chapter name to standard segment type ('intro', 'outro', 'recap', or nil)
+-- Uses frontier patterns %f[%a] to avoid matching 'Stop', 'Wedding', 'Red', 'Drop', etc.
+-- Story segments (Prologue and Epilogue) are strictly excluded and never skipped.
+function M.match_chapter_type(title)
+    if not title or type(title) ~= 'string' or title == '' then return nil end
+    local lower = title:lower():gsub('^%s+', ''):gsub('%s+$', '')
+
+    -- Strict story protection: Prologue & Epilogue are essential story beats, never skip
+    if lower:find('%f[%a]prologue%f[%A]') or lower:find('%f[%a]epilogue%f[%A]') then
+        return nil
+    end
+
+    -- 1. Intro / Opening
+    if lower:find('^%s*op%s*$') or lower:find('^%s*op%s*%d+%s*$')
+       or lower:find('%f[%a]op%s*%d*%f[%A]')
+       or lower:find('%f[%a]opening%f[%A]')
+       or lower:find('%f[%a]intro%f[%A]')
+       or lower:find('%f[%a]theme%f[%A]') then
+        if not lower:find('opening%s+scene') and not lower:find('operation') then
+            return 'intro'
+        end
+    end
+
+    -- 2. Outro / Ending / Credits / Preview
+    if lower:find('^%s*ed%s*$') or lower:find('^%s*ed%s*%d+%s*$')
+       or lower:find('%f[%a]ed%s*%d*%f[%A]')
+       or lower:find('%f[%a]ending%f[%A]')
+       or lower:find('%f[%a]outro%f[%A]')
+       or lower:find('%f[%a]credits%f[%A]')
+       or lower:find('%f[%a]preview%f[%A]') then
+        if not lower:find('^%s*end%s+of%f[%A]') then
+            return 'outro'
+        end
+    end
+
+    -- 3. Recap
+    if lower:find('%f[%a]recap%f[%A]') or lower:find('%f[%a]previously%f[%A]') then
+        return 'recap'
+    end
+
+    return nil
 end
 
 -- ASS string escaping to prevent ASS markup corruption or crash

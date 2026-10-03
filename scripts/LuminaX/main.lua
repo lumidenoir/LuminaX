@@ -22,6 +22,7 @@ local menu        = require('modules.menu')
 local screensaver = require('modules.screensaver')
 local subtitle    = require('modules.subtitle')
 local updater     = require('modules.updater')
+local smart_skip  = require('modules.smart_skip')
 
 -- Cross-Module Wireup
 local user_opts   = osc.get_user_opts()
@@ -111,6 +112,9 @@ menu.init({
     on_open           = function()
         screensaver.inhibit()
         osc.hide_osc()
+        if smart_skip and smart_skip.update_overlay then
+            smart_skip.update_overlay()
+        end
     end,
     on_close          = function()
         if mp.get_property_native('pause') and user_opts.screensaver_enabled then
@@ -121,13 +125,32 @@ menu.init({
                 end
             end)
         end
+        if smart_skip and smart_skip.update_overlay then
+            smart_skip.update_overlay()
+        end
     end,
     on_tag_updated    = function()
         screensaver.fetch_data(true)
     end,
 })
 
--- 6. Initialize OSC
+-- 6. Initialize Smart Skip & Next Episode Binge
+smart_skip.init({
+    user_opts       = user_opts,
+    state           = state,
+    utils           = utils,
+    huds            = huds,
+    request_tick    = osc.request_tick,
+    get_tmdb_current= screensaver.get_current,
+    get_canvas_size = function() return utils.get_canvas_size(osc_param) end,
+    get_virt_mouse_pos = osc.get_virt_mouse_pos,
+    is_menu_active  = function()
+        return (menu and menu.is_active and menu.is_active()) or
+               (tag_editor and tag_editor.is_active and tag_editor.is_active())
+    end,
+})
+
+-- 7. Initialize OSC
 osc.init({
     menu        = menu,
     tag_editor  = tag_editor,
@@ -135,6 +158,7 @@ osc.init({
     subtitle    = subtitle,
     huds        = huds,
     utils       = utils,
+    smart_skip  = smart_skip,
 })
 
 -- 7. Initialize Updater

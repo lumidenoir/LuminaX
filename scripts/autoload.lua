@@ -61,7 +61,7 @@ end
 
 local EXTENSIONS_VIDEO_DEFAULT = Set {
     '3g2', '3gp', 'avi', 'flv', 'm2ts', 'm4v', 'mj2', 'mkv', 'mov',
-    'mp4', 'mpeg', 'mpg', 'ogv', 'rmvb', 'webm', 'wmv', 'y4m'
+    'mp4', 'mpeg', 'mpg', 'ogv', 'rmvb', 'ts', 'webm', 'wmv', 'y4m'
 }
 
 local EXTENSIONS_AUDIO_DEFAULT = Set {
@@ -380,7 +380,11 @@ local function find_and_add_entries()
         for i = 1, MAX_ENTRIES do
             local pos = current + i * direction
             local file = files[pos]
-            if file == nil or file[1] == "." then
+            if file == nil then
+                break
+            end
+            local _, bname = utils.split_path(file)
+            if bname:sub(1, 1) == "." then
                 break
             end
 
