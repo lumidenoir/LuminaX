@@ -27,18 +27,19 @@ local PRESETS = {
         name          = 'Apple TV+ Glass',
         icon          = '✦',
         desc          = 'Translucent frosted pill with refined spatial glass aesthetics',
-        font_name     = 'Inter, SF Pro Text, -apple-system, sans-serif',
-        font_size     = 24,           -- Sleek modern proportional size
+        font_name     = 'Geist Medium, Instrument Sans Medium, SF Pro Text, Inter, sans-serif',
+        font_size     = 27,
         font_color    = 'FFFFFF',
         bold          = false,
+        spacing       = 0.2,
         box_enabled   = true,
         box_mode      = 'unified',     -- single capsule enclosing all lines
         box_color     = '000000',
-        box_opacity   = 0.68,         -- ~70% allows background video motion to seep through
-        box_radius    = 14,           -- smooth organic pill rounding
-        glass_rim     = true,         -- subtle white highlight rim (1px, ~15% alpha)
+        box_opacity   = 0.68,
+        box_radius    = 14,
+        glass_rim     = true,
         rim_color     = 'FFFFFF',
-        rim_alpha     = 'D0',         -- ASS hex alpha (D0 = ~18% visibility)
+        rim_alpha     = 'D0',
         border_size   = 0,
         border_color  = '000000',
         shadow_offset = 0,
@@ -46,22 +47,23 @@ local PRESETS = {
         padding_x     = 18,
         padding_y     = 7,
         line_spacing  = 4,
-        bottom_margin = 26,
+        bottom_margin = 28,
     },
     netflix_box = {
         id            = 'netflix_box',
         name          = 'Netflix Standard',
         icon          = '🎬',
         desc          = 'Clean dark pill with compact line spacing and balanced contrast',
-        font_name     = 'Netflix Sans, Roboto, Arial, sans-serif',
-        font_size     = 24,
+        font_name     = 'General Sans Semibold, Albert Sans SemiBold, Netflix Sans, Roboto, sans-serif',
+        font_size     = 26,
         font_color    = 'FFFFFF',
         bold          = false,
+        spacing       = 0.1,
         box_enabled   = true,
         box_mode      = 'per_line',    -- individual rounded boxes per line
         box_color     = '080808',
-        box_opacity   = 0.78,
-        box_radius    = 7,
+        box_opacity   = 0.80,
+        box_radius    = 8,
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
@@ -74,20 +76,21 @@ local PRESETS = {
         line_spacing  = 3,
         bottom_margin = 24,
     },
-    youtube_cc = {
-        id            = 'youtube_cc',
-        name          = 'YouTube Studio CC',
-        icon          = '▶',
-        desc          = 'Compact per-line pills hugging text tightly with small radius',
-        font_name     = 'Roboto, Arial, sans-serif',
-        font_size     = 22,
+    prime_video = {
+        id            = 'prime_video',
+        name          = 'Prime Video Dark',
+        icon          = '🟦',
+        desc          = 'Per-line opaque dark pill with tight radius; Amazon Prime Video signature style',
+        font_name     = 'Figtree SemiBold, Overpass SemiBold, Amazon Ember, Overpass, sans-serif',
+        font_size     = 24,
         font_color    = 'FFFFFF',
-        bold          = true,
+        bold          = false,
+        spacing       = 0.1,
         box_enabled   = true,
         box_mode      = 'per_line',
-        box_color     = '000000',
+        box_color     = '040404',
         box_opacity   = 0.82,
-        box_radius    = 5,
+        box_radius    = 8,
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
@@ -95,124 +98,21 @@ local PRESETS = {
         border_color  = '000000',
         shadow_offset = 0,
         shadow_color  = '000000',
-        padding_x     = 12,
+        padding_x     = 14,
         padding_y     = 5,
         line_spacing  = 3,
-        bottom_margin = 22,
-    },
-    cinema_gold = {
-        id            = 'cinema_gold',
-        name          = 'Theatrical Gold',
-        icon          = '🍿',
-        desc          = 'Soft cinema warm yellow on a subtle dark pill for dark-room viewing',
-        font_name     = 'Futura, Gill Sans, Trebuchet MS, sans-serif',
-        font_size     = 25,
-        font_color    = 'FFE675',     -- warm pale amber/gold
-        bold          = false,
-        box_enabled   = true,
-        box_mode      = 'unified',
-        box_color     = '0A0A0A',
-        box_opacity   = 0.60,        -- lighter tint to feel more organic on film grain
-        box_radius    = 10,
-        glass_rim     = false,
-        rim_color     = 'FFFFFF',
-        rim_alpha     = 'D0',
-        border_size   = 0,
-        border_color  = '000000',
-        shadow_offset = 1.0,
-        shadow_color  = '000000',
-        padding_x     = 18,
-        padding_y     = 7,
-        line_spacing  = 4,
-        bottom_margin = 28,
-    },
-    criterion_minimal = {
-        id            = 'criterion_minimal',
-        name          = 'Criterion Float',
-        icon          = '⚪',
-        desc          = 'Boxless pure typography with soft drop-shadow depth',
-        font_name     = 'Gill Sans, Futura, Inter, sans-serif',
-        font_size     = 25,
-        font_color    = 'F7F7F7',
-        bold          = false,
-        box_enabled   = false,
-        box_mode      = 'unified',
-        box_color     = '000000',
-        box_opacity   = 0.0,
-        box_radius    = 0,
-        glass_rim     = false,
-        rim_color     = 'FFFFFF',
-        rim_alpha     = 'D0',
-        border_size   = 1.0,
-        border_color  = '141414',
-        shadow_offset = 1.5,
-        shadow_color  = '000000',
-        padding_x     = 16,
-        padding_y     = 6,
-        line_spacing  = 4,
         bottom_margin = 24,
-    },
-    anime_outline = {
-        id            = 'anime_outline',
-        name          = 'Anime Fansub',
-        icon          = '⚔️',
-        desc          = 'Bold white text with thick pitch-black contour; boxless',
-        font_name     = 'Trebuchet MS, Montserrat, Arial, sans-serif',
-        font_size     = 26,
-        font_color    = 'FFFFFF',
-        bold          = true,
-        box_enabled   = false,
-        box_mode      = 'unified',
-        box_color     = '000000',
-        box_opacity   = 0.0,
-        box_radius    = 0,
-        glass_rim     = false,
-        rim_color     = 'FFFFFF',
-        rim_alpha     = 'D0',
-        border_size   = 2.8,
-        border_color  = '000000',
-        shadow_offset = 1.0,
-        shadow_color  = '000000',
-        padding_x     = 16,
-        padding_y     = 6,
-        line_spacing  = 3,
-        bottom_margin = 22,
-    },
-    bbc_accessible = {
-        id            = 'bbc_accessible',
-        name          = 'Studio Accessible CC',
-        icon          = '👁',
-        desc          = 'High-contrast cadmium yellow on 95% solid black capsule (WCAG AAA)',
-        font_name     = 'Atkinson Hyperlegible, Arial, sans-serif',
-        font_size     = 28,
-        font_color    = 'FFFF00',     -- pure high-visibility yellow
-        bold          = true,
-        box_enabled   = true,
-        box_mode      = 'per_line',
-        box_color     = '000000',
-        box_opacity   = 0.94,        -- almost solid
-        box_radius    = 7,
-        glass_rim     = false,
-        rim_color     = 'FFFFFF',
-        rim_alpha     = 'D0',
-        border_size   = 0,
-        border_color  = '000000',
-        shadow_offset = 0,
-        shadow_color  = '000000',
-        padding_x     = 16,
-        padding_y     = 7,
-        line_spacing  = 4,
-        bottom_margin = 26,
     },
     disney_slate = {
         id            = 'disney_slate',
         name          = 'Disney+ Midnight',
         icon          = '✨',
         desc          = 'Deep midnight navy glass capsule for a softer contrast transition',
-        font_name     = 'Avenir, Inter, Helvetica Neue, sans-serif',
-        font_size     = 24,
+        font_name     = 'Outfit Medium, Lexend Medium, Avenir, Inter, sans-serif',
+        font_size     = 25,
         font_color    = 'FFFFFF',
         bold          = false,
+        spacing       = 0.2,
         box_enabled   = true,
         box_mode      = 'unified',
         box_color     = '0B101E',     -- deep midnight navy
@@ -230,20 +130,21 @@ local PRESETS = {
         line_spacing  = 4,
         bottom_margin = 26,
     },
-    prime_video = {
-        id            = 'prime_video',
-        name          = 'Prime Video Dark',
-        icon          = '🟦',
-        desc          = 'Per-line opaque dark pill with tight radius; Amazon Prime Video signature style',
-        font_name     = 'Amazon Ember, Inter, Helvetica Neue, sans-serif',
-        font_size     = 24,
+    hbo_max = {
+        id            = 'hbo_max',
+        name          = 'Max (HBO)',
+        icon          = '💜',
+        desc          = 'Dark charcoal unified capsule; HBO Max signature dense and premium look',
+        font_name     = 'Metropolis SemiBold, Red Hat Display Medium, Gotham, Red Hat Display, sans-serif',
+        font_size     = 25,
         font_color    = 'FFFFFF',
         bold          = false,
+        spacing       = 0.0,
         box_enabled   = true,
-        box_mode      = 'per_line',
-        box_color     = '040404',     -- near-black slightly richer than pure black
-        box_opacity   = 0.80,
-        box_radius    = 8,            -- slightly tighter than Netflix 7px for visual distinction
+        box_mode      = 'unified',
+        box_color     = '141414',
+        box_opacity   = 0.84,
+        box_radius    = 10,
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
@@ -251,20 +152,75 @@ local PRESETS = {
         border_color  = '000000',
         shadow_offset = 0,
         shadow_color  = '000000',
-        padding_x     = 14,
+        padding_x     = 16,
+        padding_y     = 6,
+        line_spacing  = 3,
+        bottom_margin = 26,
+    },
+    youtube_cc = {
+        id            = 'youtube_cc',
+        name          = 'YouTube Studio CC',
+        icon          = '▶',
+        desc          = 'Compact per-line pills hugging text tightly with small radius',
+        font_name     = 'Roboto Medium, Roboto, Arial, sans-serif',
+        font_size     = 24,
+        font_color    = 'FFFFFF',
+        bold          = false,
+        spacing       = 0.0,
+        box_enabled   = true,
+        box_mode      = 'per_line',
+        box_color     = '080808',
+        box_opacity   = 0.76,
+        box_radius    = 6,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 0,
+        shadow_color  = '000000',
+        padding_x     = 12,
         padding_y     = 5,
         line_spacing  = 3,
         bottom_margin = 24,
+    },
+    bbc_accessible = {
+        id            = 'bbc_accessible',
+        name          = 'Studio Accessible CC',
+        icon          = '👁',
+        desc          = 'High-contrast cadmium yellow on 95% solid black capsule (WCAG AAA)',
+        font_name     = 'Atkinson Hyperlegible Bold, Atkinson Hyperlegible Next, Atkinson Hyperlegible, Arial, sans-serif',
+        font_size     = 28,
+        font_color    = 'FFFF00',     -- pure high-visibility yellow
+        bold          = true,
+        spacing       = 0.3,
+        box_enabled   = true,
+        box_mode      = 'per_line',
+        box_color     = '000000',
+        box_opacity   = 0.95,
+        box_radius    = 8,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 0,
+        border_color  = '000000',
+        shadow_offset = 0,
+        shadow_color  = '000000',
+        padding_x     = 16,
+        padding_y     = 7,
+        line_spacing  = 4,
+        bottom_margin = 26,
     },
     hulu_white = {
         id            = 'hulu_white',
         name          = 'Hulu Signature',
         icon          = '📺',
         desc          = 'Clean boxless white text with a hairline stroke; minimal streaming clarity',
-        font_name     = 'Graphik, Inter, Roboto, sans-serif',
+        font_name     = 'Switzer Medium, Schibsted Grotesk, Graphik, sans-serif',
         font_size     = 24,
         font_color    = 'FFFFFF',
         bold          = false,
+        spacing       = 0.3,
         box_enabled   = false,
         box_mode      = 'unified',
         box_color     = '000000',
@@ -273,14 +229,203 @@ local PRESETS = {
         glass_rim     = false,
         rim_color     = 'FFFFFF',
         rim_alpha     = 'D0',
-        border_size   = 1.0,          -- thin contour, barely visible but adds depth
-        border_color  = '1A1A1A',     -- near-black outline (not pure black for softer look)
-        shadow_offset = 1.0,          -- subtle lift shadow
+        border_size   = 1.0,
+        border_color  = '141414',
+        shadow_offset = 1.0,
         shadow_color  = '000000',
         padding_x     = 16,
         padding_y     = 6,
         line_spacing  = 4,
         bottom_margin = 26,
+    },
+    criterion_minimal = {
+        id            = 'criterion_minimal',
+        name          = 'Criterion Float',
+        icon          = '⚪',
+        desc          = 'Boxless pure typography with soft drop-shadow depth',
+        font_name     = 'Cabin Medium, Gillius ADF No2, Gill Sans, sans-serif',
+        font_size     = 24,
+        font_color    = 'F7F7F7',
+        bold          = false,
+        spacing       = 0.4,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 1.2,
+        border_color  = '101010',
+        shadow_offset = 1.4,
+        shadow_color  = '000000',
+        padding_x     = 16,
+        padding_y     = 6,
+        line_spacing  = 4,
+        bottom_margin = 26,
+    },
+    mubi_minimal = {
+        id            = 'mubi_minimal',
+        name          = 'MUBI Arthouse',
+        icon          = '🏛️',
+        desc          = 'Compact, elegant European typography with non-intrusive footprint',
+        font_name     = 'Satoshi Medium, Apercu, Inter, sans-serif',
+        font_size     = 22,
+        font_color    = 'ECECEC',
+        bold          = false,
+        spacing       = 0.3,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 0.8,
+        border_color  = '121212',
+        shadow_offset = 1.0,
+        shadow_color  = '000000',
+        padding_x     = 14,
+        padding_y     = 5,
+        line_spacing  = 3,
+        bottom_margin = 22,
+    },
+    cinema_gold = {
+        id            = 'cinema_gold',
+        name          = 'Theatrical Gold',
+        icon          = '🍿',
+        desc          = 'Warm amber cinema typography with delicate halo for dark-room viewing; boxless',
+        font_name     = 'Jost Medium, Futura Medium, Futura, Trebuchet MS, sans-serif',
+        font_size     = 25,
+        font_color    = 'FFE675',
+        bold          = false,
+        spacing       = 0.3,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 1.2,
+        border_color  = '0A0A0A',
+        shadow_offset = 1.2,
+        shadow_color  = '000000',
+        padding_x     = 18,
+        padding_y     = 7,
+        line_spacing  = 4,
+        bottom_margin = 28,
+    },
+    film_print = {
+        id            = 'film_print',
+        name          = '35mm Film Print',
+        icon          = '🎞️',
+        desc          = 'Warm ivory typography with subtle halo separation for vintage film prints',
+        font_name     = 'IBM Plex Sans Medium, Archivo SemiBold, Archivo, Univers, sans-serif',
+        font_size     = 25,
+        font_color    = 'F5EFE6',
+        bold          = false,
+        spacing       = 0.2,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 1.2,
+        border_color  = '101010',
+        shadow_offset = 1.2,
+        shadow_color  = '000000',
+        padding_x     = 16,
+        padding_y     = 6,
+        line_spacing  = 4,
+        bottom_margin = 28,
+    },
+    crunchyroll = {
+        id            = 'crunchyroll',
+        name          = 'Crunchyroll',
+        icon          = '🟠',
+        desc          = 'Clean white text with subtle stroke & drop-shadow; Crunchyroll web renderer style',
+        font_name     = 'Plus Jakarta Sans SemiBold, Lexend Medium, Open Sans, sans-serif',
+        font_size     = 26,
+        font_color    = 'FFFFFF',
+        bold          = false,
+        spacing       = 0.2,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 1.2,
+        border_color  = '000000',
+        shadow_offset = 1.8,
+        shadow_color  = '000000',
+        padding_x     = 16,
+        padding_y     = 6,
+        line_spacing  = 4,
+        bottom_margin = 26,
+    },
+    anime_outline = {
+        id            = 'anime_outline',
+        name          = 'Anime Fansub',
+        icon          = '⚔️',
+        desc          = 'Bold white text with thick pitch-black contour; boxless',
+        font_name     = 'Rubik, Trebuchet MS, Gandhi Sans, sans-serif',
+        font_size     = 26,
+        font_color    = 'FFFFFF',
+        bold          = true,
+        spacing       = 0.2,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 3.0,
+        border_color  = '000000',
+        shadow_offset = 0.0,
+        shadow_color  = '000000',
+        padding_x     = 16,
+        padding_y     = 6,
+        line_spacing  = 3,
+        bottom_margin = 22,
+    },
+    vlc_classic = {
+        id            = 'vlc_classic',
+        name          = 'VLC Classic',
+        icon          = '📙',
+        desc          = 'High-visibility yellow with solid black stroke; classic media player look',
+        font_name     = 'Arimo Bold, Liberation Sans Bold, Liberation Sans, Arial, sans-serif',
+        font_size     = 28,
+        font_color    = 'FFFF00',
+        bold          = true,
+        spacing       = 0.0,
+        box_enabled   = false,
+        box_mode      = 'unified',
+        box_color     = '000000',
+        box_opacity   = 0.0,
+        box_radius    = 0,
+        glass_rim     = false,
+        rim_color     = 'FFFFFF',
+        rim_alpha     = 'D0',
+        border_size   = 2.5,
+        border_color  = '000000',
+        shadow_offset = 1.0,
+        shadow_color  = '000000',
+        padding_x     = 16,
+        padding_y     = 6,
+        line_spacing  = 4,
+        bottom_margin = 24,
     },
 }
 
@@ -291,6 +436,7 @@ local default_config = {
     font_size     = PRESETS.apple_tv.font_size,
     font_color    = PRESETS.apple_tv.font_color,
     bold          = PRESETS.apple_tv.bold,
+    spacing       = PRESETS.apple_tv.spacing or 0.2,
     box_enabled   = PRESETS.apple_tv.box_enabled,
     box_mode      = PRESETS.apple_tv.box_mode,
     box_color     = PRESETS.apple_tv.box_color,
@@ -349,10 +495,55 @@ end
 -- Strip ASS override tags and basic HTML tags for accurate width estimation
 local function strip_tags(str)
     if not str then return '' end
-    local clean = str:gsub('\\N', '\n')
+    local clean = str:gsub('\\[Nn]', '\n')
     clean = clean:gsub('{[^}]-}', '')
     clean = clean:gsub('<[^>]->', '')
+    clean = clean:gsub('\\h', ' ')
     return clean
+end
+
+-- Sanitize a subtitle line for our overlay renderer:
+-- Removes ASS layout-control tags that would override our own positioning,
+-- rotation, scaling, and drawing commands — which cause vertical text on
+-- OP/ED karaoke tracks. Preserves color, alpha, karaoke timing tags.
+local LAYOUT_TAG_PATTERNS = {
+    '\\pos%b()',          -- \pos(x,y)       overrides our ass:pos()
+    '\\move%b()',         -- \move(...)       animated position
+    '\\an%d',            -- \an1-9           overrides our ass:an(5)
+    '\\a%d%d?',          -- \a1-11 (legacy alignment)
+    '\\frz?%-?%d+%.?%d*',-- \frz / \fr       z-rotation (causes vertical text)
+    '\\fry%-?%d+%.?%d*', -- \fry             y-axis rotation
+    '\\frx%-?%d+%.?%d*', -- \frx             x-axis rotation
+    '\\fscx%d+%.?%d*',   -- \fscx            x-scale distortion
+    '\\fscy%d+%.?%d*',   -- \fscy            y-scale distortion
+    '\\org%b()',          -- \org(x,y)        rotation origin
+    '\\clip%b()',         -- \clip(...)       clipping rectangle
+    '\\iclip%b()',        -- \iclip(...)      inverse clip
+    '\\p%d+',            -- \p1 \p2 etc.     drawing mode (produces shapes not text)
+    '\\pbo%-?%d+',       -- \pbo              drawing baseline offset
+}
+
+local function sanitize_sub_line(line, bord_w)
+    if not line or line == '' then return line end
+    -- Process each {…} override block:
+    -- If it contains no backslash, it is a pure comment (e.g. {translator note}) -> strip completely
+    local res = line:gsub('({[^}]*})', function(block)
+        local inner = block:sub(2, -2)  -- strip surrounding { }
+        if not inner:find('\\') then
+            return '' -- strip editor/translator comments
+        end
+        for _, pat in ipairs(LAYOUT_TAG_PATTERNS) do
+            inner = inner:gsub(pat, '')
+        end
+        if inner == '' or not inner:find('\\') then return '' end
+        return '{' .. inner .. '}'
+    end)
+    -- When using thick contour borders (>= 2.0px), add non-breaking space buffers between words
+    -- so thick black borders don't eat into the inter-word space and cause letters to collide
+    if bord_w and bord_w >= 2.0 then
+        res = res:gsub('([^} \t\r\n])([ \t]+)([^<{ \t\r\n])', '%1\\h %3')
+    end
+    return res
 end
 
 -- Font Metric Character Width Estimation
@@ -420,6 +611,206 @@ local function wrap_line_if_needed(line, fs, is_bold, max_w)
     table.insert(wrapped, cur_line)
     return wrapped
 end
+
+-- Count UTF-8 characters (codepoints) in a string
+local function utf8_char_count(str)
+    if not str or str == '' then return 0 end
+    local count = 0
+    local i = 1
+    local len = #str
+    while i <= len do
+        local b = str:byte(i)
+        count = count + 1
+        if b >= 0xF0 then i = i + 4
+        elseif b >= 0xE0 then i = i + 3
+        elseif b >= 0xC0 then i = i + 2
+        else i = i + 1 end
+    end
+    return count
+end
+
+-- Detect and collapse vertical character stacks (common in anime OP/ED karaoke and vertical signs)
+-- into natural horizontal lines, while strictly preserving normal multi-line dialogue.
+local function collapse_vertical_text(text)
+    if not text or text == '' then return text end
+
+    local normalized = text:gsub('\\[Nn]', '\n'):gsub('\r\n', '\n'):gsub('\r', '\n')
+    local lines = {}
+    for line in (normalized .. '\n'):gmatch('(.-)\n') do
+        table.insert(lines, line)
+    end
+    if #lines > 0 and lines[#lines] == '' then
+        table.remove(lines)
+    end
+    if #lines < 4 then return normalized end
+
+    local result_lines = {}
+    local vertical_run = {}
+
+    local function flush_vertical_run()
+        if #vertical_run == 0 then return end
+        if #vertical_run >= 4 then
+            -- 4 or more consecutive single-character lines: collapse into a horizontal word/phrase
+            local raw_chars = {}
+            for _, l in ipairs(vertical_run) do
+                local clean = strip_tags(l)
+                local trimmed = clean:gsub('^%s+', ''):gsub('%s+$', '')
+                if trimmed == '' then
+                    table.insert(raw_chars, ' ')
+                else
+                    table.insert(raw_chars, trimmed)
+                end
+            end
+            -- Deduplicate karaoke frame runs where the exact same character repeats >= 3 times
+            -- (preserves normal double letters like 'll' in 'Hello')
+            local collapsed = {}
+            local i = 1
+            while i <= #raw_chars do
+                local ch = raw_chars[i]
+                if ch ~= ' ' then
+                    local run_len = 1
+                    while i + run_len <= #raw_chars and raw_chars[i + run_len] == ch do
+                        run_len = run_len + 1
+                    end
+                    if run_len >= 3 then
+                        table.insert(collapsed, ch)
+                        i = i + run_len
+                    else
+                        table.insert(collapsed, ch)
+                        i = i + 1
+                    end
+                else
+                    table.insert(collapsed, ' ')
+                    i = i + 1
+                end
+            end
+            local combined = table.concat(collapsed, ''):gsub('%s%s+', ' ')
+            local trimmed = combined:gsub('^%s+', ''):gsub('%s+$', '')
+            if #trimmed > 0 then
+                table.insert(result_lines, trimmed)
+            end
+        else
+            for _, l in ipairs(vertical_run) do
+                table.insert(result_lines, l)
+            end
+        end
+        vertical_run = {}
+    end
+
+    for _, line in ipairs(lines) do
+        local clean = strip_tags(line)
+        local trimmed = clean:gsub('^%s+', ''):gsub('%s+$', '')
+        local ulen = utf8_char_count(trimmed)
+
+        -- A vertical letter line is strictly 1 single character or empty line separator
+        if ulen == 1 or trimmed == '' then
+            table.insert(vertical_run, line)
+        else
+            flush_vertical_run()
+            table.insert(result_lines, line)
+        end
+    end
+    flush_vertical_run()
+
+    return table.concat(result_lines, '\n')
+end
+
+M.collapse_vertical_text = collapse_vertical_text
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- Anime OP / ED Native Rendering Fallback Engine
+-- In anime opening & ending themes, Aegisub typesetting uses per-character \pos,
+-- \k karaoke timing, special colors, animations, and graphic signs.
+-- When inside an OP/ED segment, LuminaX yields directly to native MPV libass so
+-- the song's original artistic animations and typography render flawlessly!
+-- ────────────────────────────────────────────────────────────────────────────
+
+local current_chapter_is_op_ed = false
+
+local function check_is_op_ed_chapter()
+    -- 1. Check current filename / path (for standalone NC OP / ED files)
+    local fn = mp.get_property('filename', '')
+    local fp = mp.get_property('path', '')
+    local full_path = ((fp or '') .. '/' .. (fn or '')):lower()
+    if full_path:find('/nc/op') or full_path:find('/nc/ed')
+       or full_path:find('ncop') or full_path:find('nced')
+       or full_path:find('creditless') then
+        return true
+    end
+
+    -- 2. Check current chapter title
+    local ch_idx = mp.get_property_number('chapter')
+    if not ch_idx or ch_idx < 0 then
+        return false
+    end
+
+    local chapters = mp.get_property_native('chapter-list', {})
+    local cur_ch = chapters and chapters[ch_idx + 1]
+    local title = cur_ch and cur_ch.title or mp.get_property('chapter-metadata/by-key/title')
+    if title and title ~= '' then
+        local lower = title:lower():gsub('^%s+', ''):gsub('%s+$', '')
+        -- Strict story protection: Prologue & Epilogue are essential story beats, never skip
+        if lower:find('%f[%a]prologue%f[%A]') or lower:find('%f[%a]epilogue%f[%A]') then
+            return false
+        end
+
+        if lower:find('^%s*op%s*$') or lower:find('^%s*op%s*%d+%s*$')
+           or lower:find('%f[%a]op%s*%d*%f[%A]')
+           or lower:find('%f[%a]opening%f[%A]')
+           or lower:find('%f[%a]intro%f[%A]')
+           or lower:find('^%s*ed%s*$') or lower:find('^%s*ed%s*%d+%s*$')
+           or lower:find('%f[%a]ed%s*%d*%f[%A]')
+           or lower:find('%f[%a]ending%f[%A]')
+           or lower:find('%f[%a]outro%f[%A]')
+           or lower:find('%f[%a]credits%f[%A]')
+           or lower:find('%f[%a]theme%f[%A]')
+           or lower:find('%f[%a]ncop%f[%A]')
+           or lower:find('%f[%a]nced%f[%A]') then
+            if not lower:find('opening%s+scene') and not lower:find('operation') and not lower:find('^%s*end%s+of%f[%A]') then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Heuristic to detect letter-by-letter vertical karaoke breakdown in unchaptered anime
+local function is_karaoke_sub_stream(text)
+    if not text or text == '' then return false end
+    local count = 0
+    local single_or_short = 0
+    for line in text:gmatch('[^\r\n]+') do
+        local clean = strip_tags(line)
+        local trimmed = clean:gsub('^%s+', ''):gsub('%s+$', '')
+        if #trimmed > 0 then
+            count = count + 1
+            local ulen = utf8_char_count(trimmed)
+            if ulen <= 2 then
+                single_or_short = single_or_short + 1
+            end
+        end
+    end
+    if count >= 4 and (single_or_short / count) >= 0.75 then
+        return true
+    end
+    return false
+end
+
+local function is_op_ed_active(text)
+    if current_chapter_is_op_ed then return true end
+    if check_is_op_ed_chapter() then
+        current_chapter_is_op_ed = true
+        return true
+    end
+    if text and is_karaoke_sub_stream(text) then
+        return true
+    end
+    return false
+end
+
+M.is_op_ed_active = is_op_ed_active
+M.check_is_op_ed_chapter = check_is_op_ed_chapter
+M.is_karaoke_sub_stream = is_karaoke_sub_stream
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- Persistence (Save & Load Config)
@@ -490,18 +881,29 @@ function M.apply_config(skip_save)
 
     local sid = mp.get_property('sid')
     local sub_off = (sid == 'no' or sid == nil)
+    local is_visible = (config.visible ~= false)
+
+    if sub_off or not is_visible then
+        if overlay then overlay:remove() end
+        mp.set_property_bool('sub-visibility', false)
+        if ctx_ref.request_tick then ctx_ref.request_tick() end
+        return
+    end
+
+    if is_op_ed_active(current_sub_text) then
+        if overlay then overlay:remove() end
+        mp.set_property_bool('sub-visibility', false)
+        if ctx_ref.request_tick then ctx_ref.request_tick() end
+        return
+    end
 
     if config.box_enabled then
         -- In pill overlay mode, visually hide native subtitles so only the rounded pill is drawn
-        if not sub_off then
-            mp.set_property_bool('sub-visibility', false)
-        end
+        mp.set_property_bool('sub-visibility', false)
         M.update_overlay()
     else
         -- Boxless mode: hide native if we render via overlay, or sync native properties
-        if not sub_off then
-            mp.set_property_bool('sub-visibility', false)
-        end
+        mp.set_property_bool('sub-visibility', false)
         M.update_overlay()
 
         -- Also keep mpv native properties synchronized in case user toggles visibility manually
@@ -514,6 +916,7 @@ function M.apply_config(skip_save)
         pcall(mp.set_property, 'sub-border-size', tostring(config.border_size or 0))
         pcall(mp.set_property, 'sub-shadow-offset', tostring(config.shadow_offset or 0))
         pcall(mp.set_property, 'sub-shadow-color', '#' .. (config.shadow_color or '000000') .. 'A0')
+        pcall(mp.set_property, 'sub-spacing', tostring(config.spacing or 0.0))
         pcall(mp.set_property, 'sub-margin-y', tostring(config.bottom_margin or 26))
     end
 
@@ -522,6 +925,8 @@ end
 
 local user_base_preset = 'apple_tv'
 local auto_switched_anime = false
+local user_overrode_preset = false
+local tmdb_applied_for_file = false
 
 -- Apply an industry-standard style preset
 function M.apply_preset(preset_id, opts)
@@ -533,9 +938,13 @@ function M.apply_preset(preset_id, opts)
             config[k] = v
         end
     end
-    local skip_save = opts and (opts.skip_save or opts.is_auto)
-    if not (opts and opts.is_auto) then
+    local is_auto = opts and opts.is_auto
+    local skip_save = opts and (opts.skip_save or is_auto)
+    if not is_auto then
         user_base_preset = preset_id
+        if tmdb_applied_for_file then
+            user_overrode_preset = true
+        end
     end
     M.apply_config(skip_save)
     if opts and opts.silent then return end
@@ -571,13 +980,33 @@ function M.update_overlay()
     local sub_off = (sid == 'no' or sid == nil)
     local is_visible = (config.visible ~= false)
 
+    if (sub_off or not is_visible) and not live_preview_active then
+        if overlay then overlay:remove() end
+        mp.set_property_bool('sub-visibility', false)
+        return
+    end
+
     local text_to_render = current_sub_text
     if live_preview_active and (text_to_render == '' or sub_off or not is_visible) then
         text_to_render = "The quick brown fox jumps over the lazy dog\nSample dialogue renders live in real time"
     end
 
+    -- Anime OP / ED:
+    -- When playing inside an OP / ED song segment or receiving karaoke letter breakdown,
+    -- turn off subtitles completely to avoid karaoke artifacts, and resume on normal episode dialogue.
+    if not live_preview_active and is_op_ed_active(text_to_render) then
+        if overlay then overlay:remove() end
+        mp.set_property_bool('sub-visibility', false)
+        return
+    else
+        -- Regular dialogue: mute native libass and draw LuminaX's styled preset
+        if not sub_off and is_visible then
+            mp.set_property_bool('sub-visibility', false)
+        end
+    end
+
     if (text_to_render == '' or sub_off or not is_visible) and not live_preview_active then
-        overlay:remove()
+        if overlay then overlay:remove() end
         return
     end
 
@@ -618,7 +1047,8 @@ function M.update_overlay()
 
     -- Process subtitle text lines with auto-wrapping if dialog exceeds safe zone
     local raw_lines = {}
-    local norm_text = text_to_render:gsub('\\N', '\n'):gsub('\r\n', '\n'):gsub('\r', '\n')
+    local norm_text = text_to_render:gsub('\\[Nn]', '\n'):gsub('\r\n', '\n'):gsub('\r', '\n')
+    norm_text = collapse_vertical_text(norm_text)
     for line in norm_text:gmatch('[^\n]+') do
         local trimmed = line:gsub('^%s+', ''):gsub('%s+$', '')
         if #trimmed > 0 then
@@ -673,6 +1103,16 @@ function M.update_overlay()
         if lw > max_lw then max_lw = lw end
     end
 
+    -- Geometric/grotesque fonts (Outfit, Geist, General Sans, Figtree…) are ~12%
+    -- narrower than the generic per-character estimates above. Apply a correction
+    -- factor to the pill-sizing values only — the wrapping pass above intentionally
+    -- keeps the wider (conservative) estimate to avoid under-wrapping.
+    local PILL_W_CORRECTION = 0.93
+    for i = 1, #line_widths do
+        line_widths[i] = math.ceil(line_widths[i] * PILL_W_CORRECTION)
+    end
+    max_lw = math.ceil(max_lw * PILL_W_CORRECTION)
+
     local total_lines = #raw_lines
     local ass = assdraw.ass_new()
 
@@ -693,6 +1133,7 @@ function M.update_overlay()
 
     local raw_r     = config.box_radius or 14
     local scaled_r  = (raw_r == -1) and -1 or math.floor(raw_r * scale_factor + 0.5)
+    local fsp_val   = string.format('%.1f', (config.spacing or 0.0) * scale_factor)
 
     if config.box_enabled and config.box_mode == 'per_line' then
         -- ────────────────────────────────────────────────────────────────────
@@ -713,12 +1154,17 @@ function M.update_overlay()
             local lx0  = cx - math.floor(pw / 2)
             local lx1  = cx + math.floor(pw / 2)
 
-            -- Background Pill
+            -- Background Pill (rim border only emitted when glass_rim is active)
             ass:new_event()
             ass:pos(0, 0)
             ass:an(7)
-            ass:append(string.format('{\\blur0\\bord%s\\1c%s\\1a&H%s&\\3c%s\\3a&H%s&}',
-                tostring(rim_w), box_bgr, box_a, rim_bgr, rim_a))
+            if rim_w > 0 then
+                ass:append(string.format('{\\blur0\\bord%.1f\\1c%s\\1a&H%s&\\3c%s\\3a&H%s&}',
+                    rim_w, box_bgr, box_a, rim_bgr, rim_a))
+            else
+                ass:append(string.format('{\\blur0\\bord0\\1c%s\\1a&H%s&}',
+                    box_bgr, box_a))
+            end
             ass:draw_start()
             ass:round_rect_cw(lx0, ly0, lx1, ly1, r)
             ass:draw_stop()
@@ -728,10 +1174,10 @@ function M.update_overlay()
             ass:new_event()
             ass:pos(cx, text_cy)
             ass:an(5)
-            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\fsp0.5\\q2}',
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\fsp%s\\q2}',
                 font_face, fs, is_bold and '\\b700' or '\\b400',
-                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
-            ass:append(line)
+                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr, fsp_val))
+            ass:append(sanitize_sub_line(line, bord_w))
         end
 
     elseif config.box_enabled then
@@ -739,7 +1185,9 @@ function M.update_overlay()
         -- 2. Unified Pill Rendering (Apple TV+ / Cinema Gold / Disney+)
         -- ────────────────────────────────────────────────────────────────────
         local pill_w = max_lw + pad_x * 2
-        local pill_h = (total_lines * line_h) + pad_y * 2
+        -- Subtract one trailing line_sp: line_h = ceil(fs*1.18 + line_sp), so N lines
+        -- have N trailing gaps baked in; the last one overshoots into bottom padding.
+        local pill_h = (total_lines * line_h) - line_sp + pad_y * 2
         local r      = (scaled_r == -1) and math.floor(pill_h / 2) or math.min(scaled_r, math.floor(pill_h / 2))
 
         local y1     = base_y - margin_y
@@ -747,12 +1195,17 @@ function M.update_overlay()
         local x0     = cx - math.floor(pill_w / 2)
         local x1     = cx + math.floor(pill_w / 2)
 
-        -- Background Capsule
+        -- Background Capsule (rim border only emitted when glass_rim is active)
         ass:new_event()
         ass:pos(0, 0)
         ass:an(7)
-        ass:append(string.format('{\\blur0\\bord%s\\1c%s\\1a&H%s&\\3c%s\\3a&H%s&}',
-            tostring(rim_w), box_bgr, box_a, rim_bgr, rim_a))
+        if rim_w > 0 then
+            ass:append(string.format('{\\blur0\\bord%.1f\\1c%s\\1a&H%s&\\3c%s\\3a&H%s&}',
+                rim_w, box_bgr, box_a, rim_bgr, rim_a))
+        else
+            ass:append(string.format('{\\blur0\\bord0\\1c%s\\1a&H%s&}',
+                box_bgr, box_a))
+        end
         ass:draw_start()
         ass:round_rect_cw(x0, y0, x1, y1, r)
         ass:draw_stop()
@@ -763,10 +1216,10 @@ function M.update_overlay()
             ass:new_event()
             ass:pos(cx, text_cy)
             ass:an(5)
-            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\fsp0.5\\q2}',
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H80&\\fsp%s\\q2}',
                 font_face, fs, is_bold and '\\b700' or '\\b400',
-                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
-            ass:append(line)
+                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr, fsp_val))
+            ass:append(sanitize_sub_line(line, bord_w))
         end
 
     else
@@ -782,10 +1235,10 @@ function M.update_overlay()
             ass:new_event()
             ass:pos(cx, text_cy)
             ass:an(5)
-            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H90&\\fsp0.5\\q2}',
+            ass:append(string.format('{\\fn%s\\fs%d%s\\1c%s\\1a&H00&\\bord%s\\3c%s\\3a&H00&\\shad%s\\4c%s\\4a&H90&\\fsp%s\\q2}',
                 font_face, fs, is_bold and '\\b700' or '\\b400',
-                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr))
-            ass:append(line)
+                txt_bgr, tostring(bord_w), bord_bgr, tostring(shad_off), shad_bgr, fsp_val))
+            ass:append(sanitize_sub_line(line, bord_w))
         end
     end
 
@@ -854,6 +1307,13 @@ function M.on_tmdb_loaded(data)
     local auto_opt = ctx_ref.user_opts and ctx_ref.user_opts.sub_auto_anime_preset
     if auto_opt == false or auto_opt == 'no' or auto_opt == 'off' then return end
 
+    if user_overrode_preset then
+        -- User explicitly selected a preset during playback; do not clobber on pause/events
+        return
+    end
+
+    tmdb_applied_for_file = true
+
     local g = tostring(data.genres):lower()
     local is_anime = g:find('animation') or g:find('anime')
 
@@ -874,10 +1334,11 @@ end
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- Module Lifecycle & Event Listeners
--- ────────────────────────────────────────────────────────────────────────────
-
+-- ────────────────────────────────────────────────────────────────────
 function M.init(ctx)
     ctx_ref = ctx or {}
+    user_overrode_preset = false
+    tmdb_applied_for_file = false
     overlay = mp.create_osd_overlay('ass-events')
 
     -- Read configured font size from mpv.conf if set
@@ -890,9 +1351,12 @@ function M.init(ctx)
 
     load_saved_config()
 
-    -- Reset temporary auto-switched anime preset when switching files
+    -- Reset temporary auto-switched anime preset and re-check OP/ED when switching files
     if mp.register_event then
         mp.register_event('start-file', function()
+            user_overrode_preset = false
+            tmdb_applied_for_file = false
+            current_chapter_is_op_ed = check_is_op_ed_chapter()
             if auto_switched_anime then
                 auto_switched_anime = false
                 local restore = (user_base_preset and user_base_preset ~= 'anime_outline') and user_base_preset or 'apple_tv'
@@ -900,6 +1364,16 @@ function M.init(ctx)
             end
         end)
     end
+
+    -- Observe chapter boundaries to switch seamlessly between native MPV libass and LuminaX presets
+    mp.observe_property('chapter', 'number', function()
+        current_chapter_is_op_ed = check_is_op_ed_chapter()
+        M.update_overlay()
+    end)
+    mp.observe_property('chapter-list', nil, function()
+        current_chapter_is_op_ed = check_is_op_ed_chapter()
+        M.update_overlay()
+    end)
 
     -- Observe subtitle text changes
     mp.observe_property('sub-text', 'string', function(_, text)
@@ -947,6 +1421,13 @@ function M.init(ctx)
 
     -- Bind 'v' to toggle our custom subtitle pill visibility
     pcall(mp.add_forced_key_binding, 'v', 'toggle-sub-visibility', M.toggle_visibility)
+
+    -- Allow programmatic preset switching via IPC or external triggers
+    mp.register_script_message('sub-apply-preset', function(pid)
+        if pid and pid ~= '' then
+            M.apply_preset(pid)
+        end
+    end)
 
     M.apply_config(true)
 end
@@ -1002,13 +1483,18 @@ local PRESET_IDS = {
     'apple_tv',
     'netflix_box',
     'prime_video',
-    'hulu_white',
-    'youtube_cc',
-    'cinema_gold',
-    'criterion_minimal',
-    'anime_outline',
-    'bbc_accessible',
     'disney_slate',
+    'hbo_max',
+    'youtube_cc',
+    'bbc_accessible',
+    'hulu_white',
+    'criterion_minimal',
+    'mubi_minimal',
+    'cinema_gold',
+    'film_print',
+    'crunchyroll',
+    'anime_outline',
+    'vlc_classic',
 }
 
 local COLOR_PALETTE = {
@@ -1063,6 +1549,7 @@ function M.is_preset_dirty()
     if (config.padding_y or 0) ~= (p.padding_y or 0) then return true end
     if (config.line_spacing or 0) ~= (p.line_spacing or 0) then return true end
     if (config.bottom_margin or 0) ~= (p.bottom_margin or 0) then return true end
+    if math.abs((config.spacing or 0) - (p.spacing or 0)) > 0.05 then return true end
     return false
 end
 
@@ -1214,6 +1701,14 @@ function M.step_line_spacing(delta)
     config.line_spacing = nxt
     M.apply_config()
     mp.osd_message(string.format('✓ Line Spacing: %+dpx', nxt), 1.5)
+end
+
+function M.step_spacing(delta)
+    local cur = config.spacing or 0.0
+    local nxt = math.floor((math.max(0.0, math.min(1.5, cur + delta))) * 10 + 0.5) / 10
+    config.spacing = nxt
+    M.apply_config()
+    mp.osd_message(string.format('✓ Tracking (Spacing): %+.1f', nxt), 1.5)
 end
 
 function M.toggle_bold()
@@ -1491,7 +1986,17 @@ function M.get_menu_items(menu_type)
             index    = #items + 1,
         }
 
-        -- 7. Font Weight (Bold)
+        -- 7. Letter Spacing (Tracking)
+        items[#items + 1] = {
+            label    = 'Letter Spacing',
+            value    = string.format('%+.1f', config.spacing or 0.0),
+            type     = 'stepper',
+            on_prev  = function() M.step_spacing(-0.1) end,
+            on_next  = function() M.step_spacing(0.1) end,
+            index    = #items + 1,
+        }
+
+        -- 8. Font Weight (Bold)
         items[#items + 1] = {
             label    = 'Font Weight',
             value    = config.bold and 'Bold' or 'Regular',
@@ -1501,7 +2006,7 @@ function M.get_menu_items(menu_type)
             index    = #items + 1,
         }
 
-        -- 8. Letterbox Margins
+        -- 9. Letterbox Margins
         local use_margins = mp.get_property_bool('sub-use-margins', false)
         items[#items + 1] = {
             label    = 'Letterbox Margins',
@@ -1512,7 +2017,7 @@ function M.get_menu_items(menu_type)
             index    = #items + 1,
         }
 
-        -- 9. Back to Styling
+        -- 10. Back to Styling
         items[#items + 1] = {
             label  = 'Back to Styling (ESC)',
             value  = '',

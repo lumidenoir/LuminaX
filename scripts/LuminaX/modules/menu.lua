@@ -126,27 +126,27 @@ local AUDIO_PROFILES = {
         label = 'Night Mode',
         value = 'Night Mode',
         sublabel = 'Normalizes loud SFX & lifts soft whispers',
-        filter = 'dynaudnorm=f=150:g=15:m=10:p=0.9',
+        filter = 'dynaudnorm=f=150:g=15:m=10:p=0.9:r=0.9',
     },
     {
         id = 'dialogue',
         label = 'Voice Boost',
         value = 'Voice Boost',
-        sublabel = 'Intelligibility boost & 300Hz mud scoop',
-        filter = 'volume=-3.5dB,highpass=f=85,equalizer=f=300:t=q:w=1.2:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=4.0',
+        sublabel = 'Intelligibility boost',
+        filter = 'volume=-3.5dB,highpass=f=85,equalizer=f=300:t=q:w=1.2:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=4.0,alimiter=limit=-1.0dB',
     },
     {
         id = 'bass',
         label = 'Cinema Bass',
         value = 'Cinema Bass',
         sublabel = 'Deep low-end rumble with true-peak limiter',
-        filter = 'volume=-4.5dB,bass=g=5.0:f=105:w=0.6,alimiter=limit=-0.2dB',
+        filter = 'bass=g=8.0:f=100:w=0.5,alimiter=limit=-1.0dB',
     },
     {
         id = 'crossfeed',
         label = 'Spatial Headphone',
         value = 'Spatial Headphone',
-        sublabel = 'Bauer binaural crossfeed (reduces fatigue)',
+        sublabel = 'Bauer binaural crossfeed (headphones only)',
         filter = 'bs2b=profile=default',
     },
 }
@@ -158,11 +158,17 @@ local function detect_current_audio_profile_idx()
     if type(af) ~= 'table' or #af == 0 then return 1 end
     for _, filter in ipairs(af) do
         local label = filter.label or ''
-        local name = filter.name or ''
-        if label == 'nightmode' or name:find('nightmode') then
-            return 2 -- Night Mode legacy tag
+        -- Legacy @nightmode compat
+        if label == 'nightmode' then return 2 end
+        -- Per-profile labels: @lx_<id> — match against AUDIO_PROFILES table
+        local id_match = label:match('^lx_(.+)$')
+        if id_match then
+            for i, p in ipairs(AUDIO_PROFILES) do
+                if p.id == id_match then return i end
+            end
         end
-        if label == 'enhancement' or name:find('enhancement') then
+        -- Legacy @enhancement fallback (pre-fix saves)
+        if label == 'enhancement' then
             return current_audio_profile_idx or 1
         end
     end
@@ -175,12 +181,16 @@ local function set_audio_profile(idx)
     current_audio_profile_idx = idx
     local profile = AUDIO_PROFILES[idx]
 
-    -- Remove both current @enhancement and legacy @nightmode cleanly
-    pcall(mp.commandv, "af", "remove", "@enhancement")
-    pcall(mp.commandv, "af", "remove", "@nightmode")
+    -- Remove all known profile labels (current per-id and legacy fallbacks)
+    for _, p in ipairs(AUDIO_PROFILES) do
+        pcall(mp.commandv, "af", "remove", "@lx_" .. p.id)
+    end
+    pcall(mp.commandv, "af", "remove", "@enhancement")  -- legacy compat
+    pcall(mp.commandv, "af", "remove", "@nightmode")    -- legacy compat
 
     if profile.filter and profile.filter ~= '' then
-        pcall(mp.commandv, "af", "add", "@enhancement:lavfi=[" .. profile.filter .. "]")
+        -- Use per-profile label @lx_<id> so detect_current_audio_profile_idx() can identify it
+        pcall(mp.commandv, "af", "add", "@lx_" .. profile.id .. ":lavfi=[" .. profile.filter .. "]")
     end
 
     if ctx_ref.huds and ctx_ref.huds.show_pill then
