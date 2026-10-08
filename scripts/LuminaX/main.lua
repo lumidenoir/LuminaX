@@ -30,6 +30,23 @@ local state       = osc.get_state()
 local osc_param   = osc.get_osc_param()
 local icons       = osc.get_icons()
 
+local function create_modal_close_handler()
+    return function()
+        if mp.get_property_native('pause') and user_opts.screensaver_enabled then
+            screensaver.inhibit()
+            local delay = math.max(1, tonumber(user_opts.screensaver_delay) or 3)
+            mp.add_timeout(delay, function()
+                if not menu.is_active() and not tag_editor.is_active() then
+                    screensaver.activate()
+                end
+            end)
+        end
+        if smart_skip and smart_skip.update_overlay then
+            smart_skip.update_overlay()
+        end
+    end
+end
+
 -- 1. Initialize Tag Editor
 tag_editor.init({
     utils             = utils,
@@ -41,16 +58,7 @@ tag_editor.init({
         if menu.is_active() then menu.menu_close() end
         screensaver.inhibit()
     end,
-    on_close          = function()
-        if mp.get_property_native('pause') and user_opts.screensaver_enabled then
-            screensaver.inhibit()
-            mp.add_timeout(tonumber(user_opts.screensaver_delay) or 3, function()
-                if not menu.is_active() and not tag_editor.is_active() then
-                    screensaver.activate()
-                end
-            end)
-        end
-    end,
+    on_close          = create_modal_close_handler(),
 })
 
 -- 2. Initialize Screensaver
@@ -116,19 +124,7 @@ menu.init({
             smart_skip.update_overlay()
         end
     end,
-    on_close          = function()
-        if mp.get_property_native('pause') and user_opts.screensaver_enabled then
-            screensaver.inhibit()
-            mp.add_timeout(tonumber(user_opts.screensaver_delay) or 3, function()
-                if not menu.is_active() and not tag_editor.is_active() then
-                    screensaver.activate()
-                end
-            end)
-        end
-        if smart_skip and smart_skip.update_overlay then
-            smart_skip.update_overlay()
-        end
-    end,
+    on_close          = create_modal_close_handler(),
     on_tag_updated    = function()
         screensaver.fetch_data(true)
     end,
@@ -318,3 +314,20 @@ mp.register_script_message('menu-close', function()
         menu.menu_close()
     end
 end)
+
+-- Font Loading Verification
+local function verify_fonts_installed()
+    local mp_utils = require and require('mp.utils') or (mp and mp.utils)
+    if not (mp_utils and mp_utils.file_info) then return end
+    local config_dir = mp.command_native({'expand-path', '~~/'}) or ''
+    local fonts_dir = config_dir:gsub('[/\\]+$', '') .. '/fonts'
+    local inter_font = fonts_dir .. '/Inter-Medium.ttf'
+    if not mp_utils.file_info(inter_font) and mp.msg then
+        mp.msg.warn('LuminaX: Bundled font Inter-Medium.ttf was not detected in ' .. fonts_dir)
+        mp.msg.warn('LuminaX: If fonts render misaligned, please ensure the fonts/ folder exists in your mpv config.')
+    end
+end
+
+if mp and mp.add_timeout then
+    mp.add_timeout(1.5, verify_fonts_installed)
+end

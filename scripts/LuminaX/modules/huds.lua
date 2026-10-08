@@ -1,5 +1,5 @@
 -- ============================================================================
--- ModernH Module: HUDs
+-- LuminaX Module: HUDs
 -- Floating HUD overlays (Play/Pause Center Pulse, Speed, Volume, Dynamic Toasts)
 -- Frosted Obsidian Glass Design System (32px capsule height, key/value hierarchy)
 -- ============================================================================
@@ -49,49 +49,14 @@ function M.init(ctx)
     end
 
     -- ────────────────────────────────────────────────────────────────────────
-    -- Text Metric Width Estimator (Inter / Variable Width Proportional Metrics)
+    -- Text Metric Width Estimator (Delegated to shared utils engine)
     -- ────────────────────────────────────────────────────────────────────────
-    local function estimate_char_width(byte, fs, is_bold)
-        local bold_factor = is_bold and 1.05 or 1.0
-        if byte >= 0xC0 then
-            return fs * 0.95 * bold_factor
-        end
-        local ch = string.char(byte)
-        if ch:match('[WwMm@]') then
-            return fs * 0.72 * bold_factor
-        elseif ch:match('[A-Z]') then
-            return fs * 0.58 * bold_factor
-        elseif ch:match('[a-z0-9]') then
-            if ch:match('[iljtfr]') then
-                return fs * 0.30 * bold_factor
-            end
-            return fs * 0.48 * bold_factor
-        elseif ch:match('[%s]') then
-            return fs * 0.28
-        elseif ch:match('[,%.!;:|\'"%-_]') then
-            return fs * 0.25
-        else
-            return fs * 0.44 * bold_factor
-        end
-    end
-
     local function estimate_text_width(text, fs, is_bold)
-        if not text or text == '' then return 0 end
-        local clean = text:gsub('{[^}]-}', '')
-        local w = 0
-        local len = #clean
-        local i = 1
-        while i <= len do
-            local b = clean:byte(i)
-            local step = 1
-            if b >= 0xF0 then step = 4
-            elseif b >= 0xE0 then step = 3
-            elseif b >= 0xC0 then step = 2
-            end
-            w = w + estimate_char_width(b, fs, is_bold)
-            i = i + step
+        if ctx.utils and ctx.utils.estimate_text_width then
+            return ctx.utils.estimate_text_width(text, fs, is_bold)
         end
-        return math.ceil(w)
+        if not text or text == '' then return 0 end
+        return math.ceil(#text * (fs or 14) * 0.5)
     end
 
     -- ────────────────────────────────────────────────────────────────────────

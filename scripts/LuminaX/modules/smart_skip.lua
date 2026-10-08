@@ -126,7 +126,6 @@ local function execute_action()
     if not active_btn then return end
     local btn = active_btn
     local target = tonumber(btn.target_time)
-    local ptype = btn.type
     local kind = btn.kind
 
     -- Dismiss immediately on activation
@@ -135,11 +134,6 @@ local function execute_action()
     if kind == 'skip' then
         if target and target > 0 then
             mp.commandv('seek', target, 'absolute+exact')
-        end
-        if huds_mod and huds_mod.show_pill then
-            local hud_label = (ptype == 'intro') and 'Skipped Opening'
-                              or ((ptype == 'recap') and 'Skipped Recap' or 'Skipped Ending')
-            huds_mod.show_pill('\238\129\150', hud_label)
         end
     elseif kind == 'next_ep' then
         mp.commandv('playlist-next')
@@ -227,6 +221,9 @@ local function estimate_char_width(b, fs, is_bold)
 end
 
 local function estimate_text_width(str, fs, is_bold)
+    if ctx_ref.utils and ctx_ref.utils.estimate_text_width then
+        return ctx_ref.utils.estimate_text_width(str, fs, is_bold)
+    end
     if not str or str == '' then return 0 end
     local w = 0
     local i = 1
@@ -417,7 +414,12 @@ function M.update_overlay()
     local b_r = 8
     local b_x = d_w - b_w - 36
     -- Constant height elevated comfortably above the bottom OSC controls, seekbar, and scrim:
-    local bottom_margin = tonumber(user_opts and user_opts.smart_skip_bottom_margin) or 170
+    local base_margin = tonumber(user_opts and user_opts.smart_skip_bottom_margin) or 170
+    local bottom_margin = base_margin
+    if d_h and d_h > 720 then
+        -- Scale proportionally with canvas resolution so the pill never crowds the seekbar on high-DPI displays
+        bottom_margin = math.floor(base_margin * (d_h / 720))
+    end
     local b_y = d_h - bottom_margin
 
     -- Hitbox strictly bounds the unified rounded rectangle
@@ -684,11 +686,6 @@ local function on_chapter_changed(ch_idx)
         -- Arm cooldown BEFORE the seek so the resulting chapter event is ignored
         skip_seek_cooldown_until = mp.get_time() + SKIP_SEEK_COOLDOWN_SEC
         mp.commandv('seek', end_t, 'absolute+exact')
-        if huds_mod and huds_mod.show_pill then
-            local hud_label = (stype == 'intro') and 'Skipped Opening'
-                              or ((stype == 'recap') and 'Skipped Recap' or 'Skipped Ending')
-            huds_mod.show_pill('\238\129\150', hud_label)
-        end
     elseif mode == 'pill' then
         if stype == 'outro' and (user_opts.next_episode_card ~= false) and is_series then
             trigger_next_episode_card(start_t, end_t)

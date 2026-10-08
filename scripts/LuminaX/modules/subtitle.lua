@@ -969,6 +969,11 @@ end
 function M.update_overlay()
     if not overlay then return end
 
+    -- Keep live preview active whenever user is actively inside a subtitle styling menu
+    if ctx_ref and ctx_ref.state and ctx_ref.state.menu_active and ctx_ref.state.menu_active:find('^sub_') then
+        live_preview_active = true
+    end
+
     -- Check if screensaver is active (avoid obscuring TMDB backdrop art and synopsis)
     if not live_preview_active and ((ctx_ref.screensaver and ctx_ref.screensaver.is_active and ctx_ref.screensaver.is_active()) or
        (ctx_ref.state and ctx_ref.state.screensaver_active)) then
@@ -1448,7 +1453,13 @@ function M.get_mpv_conf_font_size()
     return mpv_conf_sub_font_size
 end
 
+local live_preview_timer = nil
+
 function M.set_live_preview(active)
+    if live_preview_timer then
+        live_preview_timer:kill()
+        live_preview_timer = nil
+    end
     live_preview_active = active
     M.update_overlay()
 end

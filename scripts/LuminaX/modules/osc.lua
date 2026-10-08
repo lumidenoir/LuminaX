@@ -1,5 +1,5 @@
 -- ============================================================================
--- ModernH Module: OSC
+-- LuminaX Module: OSC
 -- Core On-Screen Controller: timeline, seekbar, hover volume slider, controls & layout
 -- ============================================================================
 
@@ -39,11 +39,6 @@ end
 local function ss_hide(imm)
     if ctx_ref.screensaver then ctx_ref.screensaver.hide(imm) end
 end
-
-local assdraw = require 'mp.assdraw'
-local msg = require 'mp.msg'
-local opt = require 'mp.options'
-local utils = require 'mp.utils'
 
 --
 -- Parameters
@@ -2851,7 +2846,7 @@ function show_osc()
             if ss_delay_timer then ss_delay_timer:kill() end
             if activate_screensaver then
                 ss_delay_timer = mp.add_timeout(
-                    tonumber(user_opts.screensaver_delay) or 3,
+                    math.max(1, tonumber(user_opts.screensaver_delay) or 3),
                     activate_screensaver
                 )
             end

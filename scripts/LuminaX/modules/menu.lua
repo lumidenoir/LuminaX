@@ -30,54 +30,19 @@ end
 
 function M.init(ctx)
     ctx_ref = ctx
-    mp.observe_property('track-list', nil, function()
+    local watched_props = {
+        'track-list', 'aid', 'sid', 'playlist-pos', 'playlist-count',
+        'playlist', 'chapter', 'media-title', 'filename', 'path'
+    }
+    local function on_change()
         M.invalidate_items()
         if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('aid', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('sid', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('playlist-pos', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('playlist-count', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('playlist', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('chapter', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('media-title', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('filename', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.observe_property('path', nil, function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.register_event('start-file', function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
-    mp.register_event('file-loaded', function()
-        M.invalidate_items()
-        if M.is_active() and ctx_ref.request_tick then ctx_ref.request_tick() end
-    end)
+    end
+    for _, prop in ipairs(watched_props) do
+        mp.observe_property(prop, nil, on_change)
+    end
+    mp.register_event('start-file', on_change)
+    mp.register_event('file-loaded', on_change)
 end
 
 local function menu_add_binding(key, name, fn, flags)
@@ -1740,6 +1705,7 @@ function M.render(ass)
     local vis = l.vis
     local text_x = l.text_x
     local num_x = l.num_x
+    local utils = ctx_ref.utils or package.loaded['modules.utils']
 
     -- Dimmer Backdrop
     if not is_drawer then
@@ -1985,21 +1951,41 @@ function M.render(ass)
             local lbl_b   = (is_sel or is_cur) and '\\b700' or '\\b500'
             local main_y  = has_sub and (ry + 16) or (ry + row_h / 2)
 
+            local has_right = (item.type == 'stepper' or item.on_prev or item.on_next or
+                               item.action == 'nav_menu' or item.action == 'open_sub_config' or
+                               item.action == 'search_tmdb_picker' or item.action == 'edit_manual_inline' or
+                               is_cur or (item.time_str and item.time_str ~= '') or
+                               (item.value and item.value ~= ''))
+            local right_reserve = has_right and 110 or 24
+            local text_max_x = x0 + menu_w - right_reserve
+            local avail_w = math.max(60, text_max_x - (x0 + 16))
+
+            local raw_lbl = item.label or item.title or ''
+            local disp_label = (utils and utils.truncate_text) and utils.truncate_text(raw_lbl, avail_w, 12, is_sel or is_cur) or raw_lbl
+            local disp_sub = (has_sub and utils and utils.truncate_text) and utils.truncate_text(item.sublabel, avail_w, 10, false) or item.sublabel
+
+            local d_x1 = math.floor(x0 + 16)
+            local d_y1 = math.floor(ry)
+            local d_x2 = math.floor(text_max_x)
+            local d_y2 = math.floor(ry + row_h)
+
             ass:new_event()
             ass:pos(x0 + 16, main_y)
             ass:an(4)
-            ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs12\\fn%s%s\\q2}',
+            ass:append(string.format('{\\clip(%d,%d,%d,%d)\\bord0\\blur0\\1c%s\\1a&H%s&\\fs12\\fn%s%s\\q2}',
+                d_x1, d_y1, d_x2, d_y2,
                 lbl_col, txt_a, font, lbl_b))
-            ass:append(item.label or item.title or '')
+            ass:append(disp_label)
 
             if has_sub then
                 ass:new_event()
                 ass:pos(x0 + 16, ry + 34)
                 ass:an(4)
                 local sub_col = is_sel and '&HE5E5EA&' or '&H8E8E93&'
-                ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs10\\fn%s\\b400\\q2}',
+                ass:append(string.format('{\\clip(%d,%d,%d,%d)\\bord0\\blur0\\1c%s\\1a&H%s&\\fs10\\fn%s\\b400\\q2}',
+                    d_x1, d_y1, d_x2, d_y2,
                     sub_col, txt_a, font))
-                ass:append(item.sublabel)
+                ass:append(disp_sub)
             end
 
             -- Row value / stepper (right side)
@@ -2077,20 +2063,35 @@ function M.render(ass)
             local lbl_b   = (is_sel or is_cur) and '\\b700' or '\\b400'
             local has_sub = item.sublabel and item.sublabel ~= ''
 
+            -- Clamp text to boundary, accounting for active tag badge and right margin
+            local right_reserve = is_cur and (is_pl and 150 or 125) or 32
+            local text_max_x = x0 + menu_w - right_reserve
+            local avail_w = math.max(60, text_max_x - (x0 + text_x))
+
+            local disp_label = (utils and utils.truncate_text) and utils.truncate_text(item.label, avail_w, 14, is_sel or is_cur) or item.label
+            local disp_sub = (has_sub and utils and utils.truncate_text) and utils.truncate_text(item.sublabel, avail_w, 12, false) or item.sublabel
+
+            local c_x1 = math.floor(x0 + text_x)
+            local c_y1 = math.floor(ry)
+            local c_x2 = math.floor(text_max_x)
+            local c_y2 = math.floor(ry + row_h)
+
             ass:new_event()
             ass:pos(x0 + text_x, has_sub and (ry + 20) or (ry + row_h / 2))
             ass:an(4)
-            ass:append(string.format('{\\bord0\\blur0\\1c%s\\1a&H%s&\\fs14\\fn%s%s\\q2}',
+            ass:append(string.format('{\\clip(%d,%d,%d,%d)\\bord0\\blur0\\1c%s\\1a&H%s&\\fs14\\fn%s%s\\q2}',
+                c_x1, c_y1, c_x2, c_y2,
                 lbl_col, txt_a, font, lbl_b))
-            ass:append(item.label)
+            ass:append(disp_label)
 
             if has_sub then
                 ass:new_event()
                 ass:pos(x0 + text_x, ry + 42)
                 ass:an(4)
-                ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H%s&\\fs12\\fn%s\\b300\\q2}',
+                ass:append(string.format('{\\clip(%d,%d,%d,%d)\\bord0\\blur0\\1c&H8E8E93&\\1a&H%s&\\fs12\\fn%s\\b300\\q2}',
+                    c_x1, c_y1, c_x2, c_y2,
                     txt_a, font))
-                ass:append(item.sublabel)
+                ass:append(disp_sub)
             end
 
             if is_cur then
@@ -2154,6 +2155,38 @@ function M.render(ass)
         ass:an(2)
         ass:append(string.format('{\\bord0\\blur0\\1c&H8E8E93&\\1a&H00&\\fs11\\fn%s\\b300\\q2}', font))
         ass:append('\xe2\x96\xbc  more below')
+    end
+
+    -- VisionOS Vertical Scrollbar Track & Thumb (renders when list overflows visible area)
+    if total > vis and total > 0 then
+        local track_y1 = y0 + header_h + (is_searchable and search_h or 0) + 6
+        local track_y2 = y0 + menu_h - footer_h - 6
+        local track_h  = track_y2 - track_y1
+        if track_h > 24 then
+            local thumb_h = math.max(18, math.floor(track_h * (vis / total)))
+            local max_scroll = math.max(1, total - vis)
+            local scroll_ratio = math.min(1, math.max(0, scroll / max_scroll))
+            local thumb_y = track_y1 + math.floor((track_h - thumb_h) * scroll_ratio)
+            local bar_x = x0 + menu_w - 7
+
+            -- Subtle glass track groove
+            ass:new_event()
+            ass:pos(0, 0)
+            ass:an(7)
+            ass:append('{\\bord0\\blur0\\1c&H2C2C2E&\\1a&HE0&}')
+            ass:draw_start()
+            ass:round_rect_cw(bar_x, track_y1, bar_x + 3, track_y2, 1.5)
+            ass:draw_stop()
+
+            -- Frosted luminous thumb
+            ass:new_event()
+            ass:pos(0, 0)
+            ass:an(7)
+            ass:append('{\\bord0\\blur0\\1c&HFFFFFF&\\1a&HA0&}')
+            ass:draw_start()
+            ass:round_rect_cw(bar_x, thumb_y, bar_x + 3, thumb_y + thumb_h, 1.5)
+            ass:draw_stop()
+        end
     end
 end
 

@@ -46,7 +46,7 @@ end
 
 local function collect_media_badges()
     if utils_mod and utils_mod.collect_media_badges then
-        return utils_mod.collect_media_badges()
+        return utils_mod.collect_media_badges(state)
     end
     return {}
 end
@@ -73,7 +73,15 @@ local ss_clock_timer    = nil    -- periodic timer to keep "Ends" time live in r
 local ss_burnin_timer   = nil    -- periodic timer for OLED anti burn-in pixel micro-drift
 local ss_last_ends_t    = nil    -- tracks current formatted ends time to avoid redundant redraws
 local ss_fade_start     = 0
-local SS_FADE_DUR       = 0.40   -- fade-in duration
+local SS_FADE_DUR       = 0.40   -- default fade-in duration
+local function get_fade_dur()
+    local d = tonumber(user_opts and user_opts.screensaver_fade_duration) or SS_FADE_DUR
+    return math.max(0.05, d)
+end
+local function get_screensaver_delay()
+    local d = tonumber(user_opts and user_opts.screensaver_delay) or 3
+    return math.max(1, d)
+end
 local SS_OUT_DUR        = 0.16   -- smooth fade-out duration (160ms)
 local ss_alpha          = 255    -- current overlay alpha (255=invisible, 0=opaque)
 local ss_overlay_logo   = false  -- whether hardware overlay 1 is currently active
@@ -493,6 +501,9 @@ local function render_screensaver(alpha)
             end
         else
             -- Offline / No-TMDB Ambient Info Card
+            if tmdb_fetching then
+                table.insert(rows, {label = 'TMDB', val = 'Fetching metadata...'})
+            end
             local curr_path = mp.get_property('path', '')
             local is_stream = (utils_mod and utils_mod.is_url and utils_mod.is_url(curr_path))
             if is_stream then
@@ -869,7 +880,7 @@ local function ss_schedule_next_minute()
 end
 
 local function ss_fade_step()
-    local t = (mp.get_time() - ss_fade_start) / SS_FADE_DUR
+    local t = (mp.get_time() - ss_fade_start) / get_fade_dur()
     if t >= 1.0 then
         ss_alpha = 0
         render_screensaver(0)
@@ -2084,7 +2095,7 @@ mp.register_event('file-loaded', function()
     if mp.get_property_native('pause') and user_opts.screensaver_enabled then
         if ss_delay_timer then ss_delay_timer:kill() end
         ss_delay_timer = mp.add_timeout(
-            tonumber(user_opts.screensaver_delay) or 3,
+            get_screensaver_delay(),
             activate_screensaver
         )
     end
@@ -2108,7 +2119,7 @@ mp.observe_property('pause', 'bool', function(_, paused)
         -- Delay before screensaver activates
         if ss_delay_timer then ss_delay_timer:kill() end
         ss_delay_timer = mp.add_timeout(
-            tonumber(user_opts.screensaver_delay) or 3,
+            get_screensaver_delay(),
             activate_screensaver
         )
     else
@@ -2151,7 +2162,7 @@ mp.observe_property('mouse-pos', 'native', function(_, mpos)
             last_ss_mx, last_ss_my = mx, my
             if ss_delay_timer then ss_delay_timer:kill() end
             ss_delay_timer = mp.add_timeout(
-                tonumber(user_opts.screensaver_delay) or 3,
+                get_screensaver_delay(),
                 activate_screensaver
             )
         end

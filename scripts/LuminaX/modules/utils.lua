@@ -1,5 +1,5 @@
 -- ============================================================================
--- ModernH Module: Utils
+-- LuminaX Module: Utils
 -- Shared helper utilities, title cleaning, ASS drawing, formatters & platform detection
 -- ============================================================================
 
@@ -365,10 +365,99 @@ end
 function M.ass_escape(str)
     if not str then return '' end
     str = tostring(str)
-    str = str:gsub('\\', '\\\239\187\1bf')
+    str = str:gsub('\\', '\\\239\187\191')
     str = str:gsub('{', '\\{')
     str = str:gsub('}', '\\}')
     return str
+end
+
+-- Text Metric Width Estimator (Inter / Variable Width Proportional Metrics)
+function M.estimate_char_width(byte, fs, is_bold)
+    local bold_factor = is_bold and 1.05 or 1.0
+    if byte >= 0xC0 then
+        return fs * 0.95 * bold_factor
+    end
+    local ch = string.char(byte)
+    if ch:match('[WwMm@]') then
+        return fs * 0.72 * bold_factor
+    elseif ch:match('[A-Z]') then
+        return fs * 0.58 * bold_factor
+    elseif ch:match('[a-z0-9]') then
+        if ch:match('[iljtfr]') then
+            return fs * 0.30 * bold_factor
+        end
+        return fs * 0.48 * bold_factor
+    elseif ch:match('[%s]') then
+        return fs * 0.28
+    elseif ch:match('[,%.!;:|\'"%-_]') then
+        return fs * 0.25
+    else
+        return fs * 0.44 * bold_factor
+    end
+end
+
+function M.estimate_text_width(text, fs, is_bold)
+    if not text or text == '' then return 0 end
+    local clean = tostring(text):gsub('{[^}]-}', '')
+    local w = 0
+    local len = #clean
+    local i = 1
+    while i <= len do
+        local b = clean:byte(i)
+        local step = 1
+        if b >= 0xF0 then step = 4
+        elseif b >= 0xE0 then step = 3
+        elseif b >= 0xC0 then step = 2
+        end
+        w = w + M.estimate_char_width(b, fs, is_bold)
+        i = i + step
+    end
+    return math.ceil(w)
+end
+
+-- Truncate text to fit within a maximum pixel width, appending '...' safely at UTF-8 boundaries
+function M.truncate_text(text, max_w, fs, is_bold)
+    if not text or text == '' then return '' end
+    if not max_w or max_w <= 0 then return text end
+    fs = fs or 12
+    local clean = tostring(text):gsub('{[^}]-}', '')
+    local total_w = M.estimate_text_width(clean, fs, is_bold)
+    if total_w <= max_w then
+        return text
+    end
+
+    local ell = '...'
+    local ell_w = M.estimate_text_width(ell, fs, is_bold)
+    local target_w = max_w - ell_w
+    if target_w <= 0 then return ell end
+
+    local len = #clean
+    local i = 1
+    local cur_w = 0
+    local last_pos = 0
+
+    while i <= len do
+        local b = clean:byte(i)
+        local step = 1
+        if b >= 0xF0 then step = 4
+        elseif b >= 0xE0 then step = 3
+        elseif b >= 0xC0 then step = 2
+        end
+
+        local char_w = M.estimate_char_width(b, fs, is_bold)
+        if cur_w + char_w > target_w then
+            break
+        end
+
+        cur_w = cur_w + char_w
+        last_pos = i + step - 1
+        i = i + step
+    end
+
+    if last_pos > 0 then
+        return clean:sub(1, last_pos) .. ell
+    end
+    return ell
 end
 
 -- Safe time formatting helper: seconds -> "HH:MM:SS" or "MM:SS"
