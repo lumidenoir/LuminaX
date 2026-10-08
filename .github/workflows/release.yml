@@ -41,9 +41,7 @@ jobs:
         with:
           body_path: dist/release_body.md
           prerelease: ${{ contains(github.ref_name, '-') }}
-          fail_on_unmatched_files: true
           files: |
-            dist/luminaX-linux.tar.gz
-            dist/luminaX-macos.tar.gz
-            dist/luminaX-windows.zip
+            dist/luminaX-*.tar.gz
+            dist/luminaX-*.zip
             dist/checksums.txt

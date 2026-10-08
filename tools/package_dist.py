@@ -36,7 +36,6 @@ def clean_osc_conf(src_path, dest_path):
     with open(src_path, "r", encoding="utf-8") as f:
         content = f.read()
     # Replace any concrete key with placeholder
-    import re
     cleaned = re.sub(r"tmdb_api_key\s*=[^\r\n]*", "tmdb_api_key=your_api_key_here", content)
     with open(dest_path, "w", encoding="utf-8") as f:
         f.write(cleaned)
@@ -61,7 +60,7 @@ def build_packages():
     os.makedirs(stage_dir, exist_ok=True)
 
     # 1. Prepare Staging Tree
-    print("\n[1/4] Preparing Clean Distribution Staging Tree...")
+    print("\n[1/5] Preparing Clean Distribution Staging Tree...")
     # Copy scripts/LuminaX and companion scripts (autoload.lua, thumbfast.lua)
     shutil.copytree("scripts/LuminaX", os.path.join(stage_dir, "scripts", "LuminaX"), dirs_exist_ok=True)
     for s in os.listdir("scripts"):
@@ -105,10 +104,19 @@ def build_packages():
             if f.endswith(".pyc") or f == ".DS_Store" or f == "Thumbs.db":
                 os.remove(os.path.join(r, f))
 
+    ver_tag = "v1.3.0"
+    v_file = os.path.join(root_dir, "scripts", "LuminaX", "version.lua")
+    if os.path.exists(v_file):
+        with open(v_file, "r", encoding="utf-8") as f:
+            m = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", f.read())
+            if m:
+                v = m.group(1).strip()
+                ver_tag = v if v.startswith("v") else f"v{v}"
+
     # 2. Build Linux & macOS Packages (.tar.gz)
-    print("\n[2/4] Packaging Linux & macOS Releases (luminaX-linux.tar.gz & luminaX-macos.tar.gz)...")
-    linux_tar = os.path.join(dist_dir, "luminaX-linux.tar.gz")
-    macos_tar = os.path.join(dist_dir, "luminaX-macos.tar.gz")
+    print(f"\n[2/5] Packaging Linux & macOS Releases (luminaX-{ver_tag}-linux.tar.gz & luminaX-{ver_tag}-macos.tar.gz)...")
+    linux_tar = os.path.join(dist_dir, f"luminaX-{ver_tag}-linux.tar.gz")
+    macos_tar = os.path.join(dist_dir, f"luminaX-{ver_tag}-macos.tar.gz")
     
     # Add install.sh and update.sh to posix stage
     shutil.copy2("tools/install.sh", os.path.join(stage_dir, "install.sh"))
@@ -135,7 +143,7 @@ def build_packages():
     print(f"  ✓ Created: {macos_tar} ({os.path.getsize(macos_tar):,} bytes)")
 
     # 3. Build Windows Package (.zip)
-    print("\n[3/4] Packaging Windows Release (luminaX-windows.zip)...")
+    print(f"\n[3/5] Packaging Windows Release (luminaX-{ver_tag}-windows.zip)...")
     # Clean linux scripts from stage and add windows scripts
     for linux_script in ["install.sh", "update.sh"]:
         p = os.path.join(stage_dir, linux_script)
@@ -146,7 +154,7 @@ def build_packages():
     shutil.copy2("tools/update.bat", os.path.join(stage_dir, "update.bat"))
     shutil.copy2("tools/update.ps1", os.path.join(stage_dir, "update.ps1"))
 
-    win_zip = os.path.join(dist_dir, "luminaX-windows.zip")
+    win_zip = os.path.join(dist_dir, f"luminaX-{ver_tag}-windows.zip")
     with zipfile.ZipFile(win_zip, "w", zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(stage_dir):
             for file in sorted(files):
@@ -158,6 +166,14 @@ def build_packages():
 
     print(f"  ✓ Created: {win_zip} ({os.path.getsize(win_zip):,} bytes)")
 
+    # Produce unversioned aliases for backward compatibility with fixed-link down loaders
+    linux_compat = os.path.join(dist_dir, "luminaX-linux.tar.gz")
+    macos_compat = os.path.join(dist_dir, "luminaX-macos.tar.gz")
+    win_compat = os.path.join(dist_dir, "luminaX-windows.zip")
+    shutil.copy2(linux_tar, linux_compat)
+    shutil.copy2(macos_tar, macos_compat)
+    shutil.copy2(win_zip, win_compat)
+
     # Cleanup staging
     shutil.rmtree(stage_dir)
 
@@ -165,7 +181,7 @@ def build_packages():
     print("\n[4/5] Generating SHA256 Checksums...")
     checksum_file = os.path.join(dist_dir, "checksums.txt")
     checksums = []
-    for pkg in [linux_tar, macos_tar, win_zip]:
+    for pkg in [linux_tar, macos_tar, win_zip, linux_compat, macos_compat, win_compat]:
         csum = sha256_file(pkg)
         fname = os.path.basename(pkg)
         checksums.append(f"{csum}  {fname}")
@@ -184,7 +200,6 @@ def build_packages():
 
 def get_repo_url():
     try:
-        import subprocess
         url = subprocess.check_output(["git", "remote", "get-url", "origin"], stderr=subprocess.DEVNULL).decode().strip()
         m = re.search(r"github\.com[:/]([^/]+)/([^/.]+)(?:\.git)?$", url)
         if m:
@@ -194,7 +209,6 @@ def get_repo_url():
     return None
 
 def generate_release_body(dist_dir, checksums):
-    import subprocess
     print("\n[5/5] Generating Release Body & Conventional Commit Changelog...")
     repo_url = get_repo_url()
     try:
