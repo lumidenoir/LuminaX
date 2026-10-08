@@ -223,7 +223,7 @@ function M.perform_update()
 
     safe_async_cmd(updater_cmd, function(ok, res)
         is_updating = false
-        if ok and res and (res.status == 0 or res.error_string == nil) then
+        if ok and res and res.status == 0 then
             state.update_available = nil
             if request_init then request_init() end
             request_tick()
