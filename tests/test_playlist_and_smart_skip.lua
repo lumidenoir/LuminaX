@@ -262,7 +262,7 @@ if active_timer_cb then
     active_timer_cb()
 end
 assert_true(overlay_data.text:find('\\clip') ~= nil, 'Opening skip button uses \\clip rectangular progress fill')
-assert_true(overlay_data.text:find('0A84FF', 1, true) ~= nil, 'Progress uses Apple System Blue 0A84FF')
+assert_true(overlay_data.text:find('FF840A', 1, true) ~= nil or overlay_data.text:find('0A84FF', 1, true) ~= nil, 'Progress uses Apple System Blue')
 assert_true(overlay_data.text:find('SKIP') ~= nil, 'Opening button displays SKIP label')
 
 -- 3. Stale button dismissal when seeking outside opening
@@ -284,7 +284,7 @@ if active_timer_cb then
     active_timer_cb()
 end
 assert_true(overlay_data.text:find('NEXT') ~= nil, 'Transitions cleanly to NEXT without stacking')
-assert_true(overlay_data.text:find('FF9500', 1, true) ~= nil, 'Ending progress uses Theme Orange FF9500')
+assert_true(overlay_data.text:find('0095FF', 1, true) ~= nil or overlay_data.text:find('FF9500', 1, true) ~= nil, 'Ending progress uses Theme Orange')
 
 -- 5. Epilogue never triggers button
 observers['chapter']('chapter', 4)

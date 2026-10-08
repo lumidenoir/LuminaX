@@ -85,8 +85,9 @@ local tmdb_current = nil   -- cached result for current file
 local on_tmdb_loaded_cb = nil
 
 local function set_tmdb_current(data)
+    local is_same = (tmdb_current == data)
     tmdb_current = data
-    if data and on_tmdb_loaded_cb then
+    if data and on_tmdb_loaded_cb and not is_same then
         pcall(on_tmdb_loaded_cb, data)
     end
 end
@@ -1382,18 +1383,13 @@ local function fetch_tmdb_logo(search_type, show_id, orig_lang, cb)
         end
     end
 
-    local lang_param = 'en,null,ja,ko,zh,fr,de,es,it'
-    if orig_lang and orig_lang ~= '' and not lang_param:find(orig_lang, 1, true) then
-        lang_param = lang_param .. ',' .. orig_lang
-    end
-    local pref_l = user_opts.screensaver_logo_lang
-    if pref_l and pref_l ~= '' and pref_l ~= 'auto' and pref_l ~= 'original' and not lang_param:find(pref_l, 1, true) then
-        lang_param = lang_param .. ',' .. pref_l
-    end
-
+    -- Query TMDB images endpoint without language filtering so TMDB returns ALL available
+    -- logos and graphics across every language (Tamil, Telugu, Japanese, Korean, English, etc.).
+    -- Our backend sorting logic below then prioritizes by user language preference, original language,
+    -- resolution, aspect ratio, and vote quality without any API-side truncation or false negatives.
     local images_url = string.format(
-        'https://api.tmdb.org/3/%s/%d/images?api_key=%s&include_image_language=%s',
-        search_type, show_id, key, lang_param
+        'https://api.tmdb.org/3/%s/%d/images?api_key=%s',
+        search_type, show_id, key
     )
     safe_async_cmd({
         name = 'subprocess',
@@ -1634,8 +1630,6 @@ end
 local last_parsed_title = nil
 
 local function fetch_tmdb_data(force_refresh)
-    local key = user_opts.tmdb_api_key
-    if not key or key == '' then return end
     if tmdb_fetching then return end
 
     -- URL Guard: Skip TMDB searches on network streams (YouTube, Twitch, RTMP, etc.)
@@ -1723,6 +1717,9 @@ local function fetch_tmdb_data(force_refresh)
             return
         end
     end
+
+    local key = user_opts.tmdb_api_key
+    if not key or key == '' then return end
 
     tmdb_fetching = true
 
@@ -1910,7 +1907,7 @@ local function fetch_tmdb_data(force_refresh)
                 end
                 local cast_str = table.concat(cast_list, '  ·  ')
 
-                local studio_str = filter_and_format_studios(tv_det.production_companies, tv_det.networks)
+                local studio_str = filter_and_format_studios(tv_det and tv_det.production_companies, tv_det and tv_det.networks)
 
                 local result = {
                     show_id        = show_id,
@@ -2082,8 +2079,9 @@ mp.register_event('file-loaded', function()
     tmdb_fetching = false
     last_parsed_title = nil
     ss_hide()
+    -- Immediately check cache & metadata on file-loaded for subtitle presets & skip detection
+    debounced_fetch_tmdb(0.05)
     if mp.get_property_native('pause') and user_opts.screensaver_enabled then
-        debounced_fetch_tmdb(0.25)
         if ss_delay_timer then ss_delay_timer:kill() end
         ss_delay_timer = mp.add_timeout(
             tonumber(user_opts.screensaver_delay) or 3,

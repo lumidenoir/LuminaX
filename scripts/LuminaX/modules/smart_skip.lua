@@ -45,6 +45,11 @@ local active_btn = nil
 local chapter_zones = {}
 local dynamic_keys_bound = false
 local manual_dismiss_until = nil
+-- Cooldown timestamp set after a programmatic chapter-skip seek.
+-- on_chapter_changed ignores events fired within this window to prevent
+-- the seek itself from re-triggering the handler (infinite loop).
+local skip_seek_cooldown_until = nil
+local SKIP_SEEK_COOLDOWN_SEC = 1.5
 
 local function is_series_context()
     if not utils_mod then return false end
@@ -314,10 +319,13 @@ local function draw_netflix_progress_button(ass, cfg)
     ass:round_rect_cw(rx1, ry, rx2, ry + rh, 1)
     ass:draw_stop()
 
-    -- Active progress fill: Apple System Blue &H0A84FF& for Intro/OP, Theme Orange &HFF9500& for Outro/ED
+    -- Active progress fill: Apple System Blue (RGB #0A84FF) for Intro/OP, Theme Orange (RGB #FF9500) for Outro/ED
+    -- NOTE: ASS color format is BGR, so RGB values must be byte-swapped:
+    --   Blue  #0A84FF (RGB) → FF840A (ASS/BGR)
+    --   Orange #FF9500 (RGB) → 0095FF (ASS/BGR)
     if progress > 0 then
         local is_outro = (cfg.ptype == 'outro') or (cfg.kind == 'next_ep')
-        local rail_col = is_outro and 'FF9500' or '0A84FF'
+        local rail_col = is_outro and '0095FF' or 'FF840A'
         local fill_right = math.floor(rx1 + (rw * progress))
         ass:new_event()
         ass:pos(0, 0)
@@ -627,6 +635,11 @@ local function refresh_chapter_zones()
 end
 
 local function on_chapter_changed(ch_idx)
+    -- Guard: ignore chapter events fired by our own programmatic seek (re-entrancy / infinite loop)
+    if skip_seek_cooldown_until and mp.get_time() < skip_seek_cooldown_until then
+        return
+    end
+
     -- Whenever chapter changes, dismiss existing button immediately to avoid any stacking
     dismiss_all(false, true)
 
@@ -659,6 +672,17 @@ local function on_chapter_changed(ch_idx)
     end
 
     if mode == 'auto' then
+        -- Guard: don't auto-skip while paused — the user hasn't started watching yet.
+        -- Seeking while paused lands at end_t and immediately re-fires chapter changed,
+        -- causing an infinite skip loop.
+        local is_paused = mp.get_property_bool('pause', false)
+        if is_paused then
+            -- Fall through to show the pill instead so the user can decide
+            trigger_skip_pill(stype, start_t, end_t, title)
+            return
+        end
+        -- Arm cooldown BEFORE the seek so the resulting chapter event is ignored
+        skip_seek_cooldown_until = mp.get_time() + SKIP_SEEK_COOLDOWN_SEC
         mp.commandv('seek', end_t, 'absolute+exact')
         if huds_mod and huds_mod.show_pill then
             local hud_label = (stype == 'intro') and 'Skipped Opening'
@@ -746,6 +770,7 @@ function M.init(ctx)
 
     mp.register_event('start-file', function()
         manual_dismiss_until = nil
+        skip_seek_cooldown_until = nil  -- reset cooldown on new file
         dismiss_all(false, true)
         chapter_zones = {}
     end)

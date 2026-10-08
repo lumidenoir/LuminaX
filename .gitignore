@@ -57,3 +57,7 @@ desktop.ini
 *.swo
 *.sublime-project
 *.sublime-workspace
+
+# Local Font Scratchpad
+font_scratch/
+
