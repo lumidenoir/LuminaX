@@ -62,7 +62,8 @@ def test_mpv_headless_e2e():
         
         # Read until our request_id is returned
         buf = ""
-        while True:
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
             chunk = sock.recv(4096).decode("utf-8", errors="replace")
             if not chunk:
                 break
@@ -79,7 +80,7 @@ def test_mpv_headless_e2e():
                 except Exception:
                     pass
             buf = lines[-1]
-        return None
+        raise TimeoutError(f"mpv command timed out waiting for response: {cmd_list}")
 
     # 1. Verify player version
     res = send_cmd(["get_property", "mpv-version"])

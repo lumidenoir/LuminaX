@@ -24,10 +24,25 @@ local TEST_CASES = {
     {raw = "www.1TamilMV.gripe - Dacoit (2026) Telugu HQ PreDVD - 1080p - x264 - HQ Clean - AAC - 2.5GB.mkv", exp_title = "Dacoit", exp_year = "2026"},
     {raw = "www.1TamilMV.reisen - The Odyssey (2026) New HQ HDTS - 1080p - x264 - [Tam + Tel + Hin + Eng] - HQ Clean - 3.3GB.mkv", exp_title = "The Odyssey", exp_year = "2026"},
     {raw = "www.1TamilMV.immo - Project Hail Mary (2026) New HQ PreDVD - 1080p - x264 - [Tam + Tel + Eng] - HQ Clean - AAC - 2.9GB.mkv", exp_title = "Project Hail Mary", exp_year = "2026"},
+    {raw = "[SubsPlease] 葬送のフリーレン - 28 (1080p).mkv", exp_title = "葬送のフリーレン", exp_s = 1, exp_e = 28},
+    {raw = "Amelie.2001.1080p.BluRay.x264.mkv", exp_title = "Amelie", exp_year = "2001"},
+    {raw = "[[ReleaseGroup]] Show.Name.2024.1080p.mkv", exp_title = "Show Name", exp_year = "2024"},
 }
 
 local passed = 0
 local failed = 0
+
+local function safe_truncate(str, max_bytes)
+    if #str <= max_bytes then return str end
+    local cut = max_bytes
+    while cut > 0 and (str:byte(cut) >= 128 and str:byte(cut) < 192) do
+        cut = cut - 1
+    end
+    if cut > 0 and str:byte(cut) >= 192 then
+        cut = cut - 1
+    end
+    return str:sub(1, cut) .. "..."
+end
 
 for i, tc in ipairs(TEST_CASES) do
     local title, s, e, year = utils.parse_clean_title('', tc.raw)
@@ -40,7 +55,7 @@ for i, tc in ipairs(TEST_CASES) do
     if ok then
         passed = passed + 1
         print(string.format("  [%02d] ✓ PASS: '%s' -> '%s'%s%s",
-            i, tc.raw:sub(1, 35) .. "...", title,
+            i, safe_truncate(tc.raw, 35), title,
             year and (" (" .. year .. ")") or "",
             (s and e) and (" [S" .. s .. "E" .. e .. "]") or ""))
     else

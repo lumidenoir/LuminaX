@@ -76,7 +76,8 @@ Second Line of Dialogue Here
         sock.sendall(payload.encode("utf-8"))
 
         buf = ""
-        while True:
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
             chunk = sock.recv(4096).decode("utf-8", errors="replace")
             if not chunk:
                 break
@@ -92,6 +93,7 @@ Second Line of Dialogue Here
                         return msg
                 except json.JSONDecodeError:
                     pass
+        raise TimeoutError(f"mpv command timed out waiting for response: {cmd_list}")
 
     # 3. Load video and subtitle file
     res = send_cmd(["loadfile", video_path, "replace"])
@@ -124,8 +126,9 @@ Second Line of Dialogue Here
     time.sleep(0.1)
 
     send_cmd(["quit"])
-    proc.wait(timeout=3.0)
-    print("  ✓ Headless MPV exited cleanly with 0 crashes or script errors")
+    rc = proc.wait(timeout=3.0)
+    assert rc == 0, f"Headless MPV exited with non-zero exit code: {rc}"
+    print(f"  ✓ Headless MPV exited cleanly with exit code {rc}")
     print("=== Subtitle Integration Suite PASSED ===")
 
 if __name__ == "__main__":

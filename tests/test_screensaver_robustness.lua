@@ -284,7 +284,35 @@ assert_eq("Dim logo brightened", eval_logo_luminance(dim_gray), 'eq=brightness=0
 print("\n=== 6. Testing Studio Extraction & Holding Company Filtering ===")
 
 package.loaded['mp.assdraw'] = { ass_new = function() return {} end }
-package.loaded['mp.utils'] = { file_info = function() return nil end, readdir = function() return {} end }
+package.loaded['mp.utils'] = {
+    file_info = function() return nil end,
+    readdir = function() return {} end,
+    parse_json = function(str)
+        if not str or str == '' or str:find('^%s*<') or not str:find('^%s*[{%[]') or not str:find('[}%]]$') then
+            return nil
+        end
+        local results = {}
+        for item_str in str:gmatch('(%{[^{}]-%})') do
+            local id = tonumber(item_str:match('"id"%s*:%s*(%d+)'))
+            local title = item_str:match('"title"%s*:%s*"([^"]+)"') or item_str:match('"name"%s*:%s*"([^"]+)"')
+            local mtype = item_str:match('"media_type"%s*:%s*"([^"]+)"') or 'movie'
+            local year_raw = item_str:match('"release_date"%s*:%s*"([^"]+)"') or item_str:match('"first_air_date"%s*:%s*"([^"]+)"')
+            local rating = tonumber(item_str:match('"vote_average"%s*:%s*([%d%.]+)'))
+            local overview = item_str:match('"overview"%s*:%s*"([^"]+)"')
+            if id and title then
+                table.insert(results, {
+                    id = id,
+                    title = title,
+                    media_type = mtype,
+                    release_date = year_raw,
+                    vote_average = rating,
+                    overview = overview or '',
+                })
+            end
+        end
+        return { results = results }
+    end
+}
 _G.mp = _G.mp or {
     create_osd_overlay = function() return { update = function() end, remove = function() end } end,
     register_event = function() end,
@@ -507,6 +535,76 @@ assert_true("Mega title scales font size deeply", m_fs < 35)
 
 local e_wrap, e_lines, e_fs = ss.adaptive_scale_title("", 44, 24, true)
 assert_eq("Empty title returns 0 lines", e_lines, 0)
+
+print("\n=== 11. Testing Network Failure & Curl Subprocess Fallbacks ===")
+
+-- Mock mp.command_native_async for curl failure simulations
+local mock_async_cb = nil
+local mock_async_cmd = nil
+mp.command_native_async = function(cmd, cb)
+    mock_async_cmd = cmd
+    mock_async_cb = cb
+    return 42 -- mock subprocess handle
+end
+
+-- 11a. Missing API key returns empty list immediately
+local cand_result = nil
+ss.init({ user_opts = { tmdb_api_key = '' } })
+ss.fetch_candidates("Inception", function(cands) cand_result = cands end)
+assert_eq("Empty API key returns empty candidates list", #cand_result, 0)
+
+-- Set a valid API key for subsequent tests
+ss.init({ user_opts = { tmdb_api_key = 'mock_api_key_123' } })
+
+-- 11b. Curl Timeout (Exit Code 28, timed out)
+cand_result = nil
+ss.fetch_candidates("Interstellar", function(cands) cand_result = cands end)
+assert_true("Async subprocess dispatched for candidate query", mock_async_cmd ~= nil)
+assert_eq("Subprocess invokes curl with timeout limit", mock_async_cmd.args[1], 'curl')
+
+-- Simulate curl timeout (status = 28, stdout empty)
+mock_async_cb(true, { status = 28, stdout = "" })
+assert_true("Curl timeout (exit 28) safely returns empty table without crashing", cand_result ~= nil and #cand_result == 0)
+
+-- 11c. Curl Connection Refused / No Internet (Exit Code 7)
+cand_result = nil
+ss.fetch_candidates("Dune", function(cands) cand_result = cands end)
+mock_async_cb(true, { status = 7, stdout = "" })
+assert_true("Curl connection failure (exit 7) returns empty table safely", cand_result ~= nil and #cand_result == 0)
+
+-- 11d. Subprocess Execution Failure (ok = false)
+cand_result = nil
+ss.fetch_candidates("Oppenheimer", function(cands) cand_result = cands end)
+mock_async_cb(false, nil)
+assert_true("Subprocess dispatch failure (ok=false) returns empty table safely", cand_result ~= nil and #cand_result == 0)
+
+-- 11e. Corrupted / HTML 502 Bad Gateway Response
+cand_result = nil
+ss.fetch_candidates("Blade Runner", function(cands) cand_result = cands end)
+mock_async_cb(true, { status = 0, stdout = "<html><body>502 Bad Gateway: Cloudflare Error</body></html>" })
+assert_true("HTML error response (malformed JSON) parsed safely to empty list", cand_result ~= nil and #cand_result == 0)
+
+-- 11f. Truncated JSON payload
+cand_result = nil
+ss.fetch_candidates("Tenet", function(cands) cand_result = cands end)
+mock_async_cb(true, { status = 0, stdout = '{"page": 1, "results": [{"id": 123, "title": "Tenet"' })
+assert_true("Truncated JSON payload parsed safely to empty list", cand_result ~= nil and #cand_result == 0)
+
+-- 11g. Successful TMDB response parsing
+cand_result = nil
+local valid_json = '{"page":1,"results":[{"id":577922,"title":"Tenet","media_type":"movie","release_date":"2020-08-22","vote_average":7.2,"overview":"Armed with only one word, Tenet..."}]}'
+ss.fetch_candidates("Tenet", function(cands) cand_result = cands end)
+mock_async_cb(true, { status = 0, stdout = valid_json })
+assert_eq("Valid TMDB JSON extracts candidates accurately", #cand_result, 1)
+assert_eq("Extracted candidate title matches", cand_result[1].title, "Tenet")
+assert_eq("Extracted candidate release year", cand_result[1].year, "2020")
+assert_eq("Extracted candidate rating", cand_result[1].rating, "7.2")
+
+-- 11h. Verify Ambient Card fallback integrity after failed metadata fetch
+local fallback_rows = generate_ambient_rows('/media/movies/LocalMovie.2024.mkv', 7200, 6, 'eac3', 1920, 1080)
+assert_eq("Ambient card generates 3 fallback rows when metadata fetch fails", #fallback_rows, 3)
+assert_eq("Ambient card preserves audio codec", fallback_rows[2].val, "EAC3 6ch")
+assert_eq("Ambient card preserves resolution quality", fallback_rows[3].val, "1080p FHD")
 
 print(string.format("\n========================================================"))
 print(string.format("Screensaver Robustness Suite: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))

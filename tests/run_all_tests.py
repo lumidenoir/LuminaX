@@ -11,6 +11,7 @@ import time
 import subprocess
 
 SUITES = [
+    {"name": "Syntax & Structural Integrity", "cmd": ["python3", "tests/test_syntax_and_integrity.py"]},
     {"name": "Clean Corpus Parsing", "cmd": ["lua", "tests/test_clean_corpus.lua"]},
     {"name": "Stream Guard & Subprocess Debounce", "cmd": ["lua", "tests/test_stream_guard_debouncing.lua"]},
     {"name": "UTF-8 Editor Stepping", "cmd": ["lua", "tests/test_utf8_editor.lua"]},
@@ -41,6 +42,7 @@ def main():
     sandbox_config = tempfile.mkdtemp(prefix="luminax_test_sandbox_")
     test_env = os.environ.copy()
     test_env["XDG_CONFIG_HOME"] = sandbox_config
+    test_env["HOME"] = sandbox_config
 
     total_start = time.time()
     results = []
@@ -51,7 +53,7 @@ def main():
             cmd = suite["cmd"]
             print(f"\n▶ Running: {name} ({' '.join(cmd)})")
             start = time.time()
-            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=test_env)
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", env=test_env)
             dur = time.time() - start
 
             lines = proc.stdout.strip().split("\n")

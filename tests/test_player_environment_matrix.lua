@@ -264,6 +264,38 @@ assert_eq("Linux mkdir binary is mkdir", lin_env.mkdir_cmd[1], 'mkdir')
 assert_eq("Linux mkdir flag is -p", lin_env.mkdir_cmd[2], '-p')
 assert_eq("Linux paste binary is sh", lin_env.paste_cmd[1], 'sh')
 
+print("\n=== 5. Testing Menu Long Filename Boundary Truncation & Clipping ===")
+
+-- 5a. Short text remains untruncated
+local short_t = "Short Video.mp4"
+assert_eq("Short filename is untouched", utils.truncate_text(short_t, 500, 12, false), short_t)
+
+-- 5b. Long filename truncation (Secret Level episode from user screenshot)
+local long_fn = "Secret.Level.S01E05.Warhammer.40000.And.They.Shall.Know.No.Fear.2160p.AMZN.WEB-DL.Hindi.DDP5.1-English.DDP5.1.Atmos.HDR.H.265-4kHdHub.Com.mkv"
+local max_w = 400 -- Available pixels in modal card
+local trunc_fn = utils.truncate_text(long_fn, max_w, 12, false)
+assert_true("Long filename is truncated", #trunc_fn < #long_fn)
+assert_true("Truncated filename ends with ellipsis", trunc_fn:find("%.%.%.$") ~= nil)
+local est_w = utils.estimate_text_width(trunc_fn, 12, false)
+assert_true("Truncated text width strictly fits inside boundary", est_w <= max_w)
+
+-- 5c. Unicode CJK title truncation respects UTF-8 codepoint boundaries
+local cjk_title = "葬送のフリーレン 葬送のフリーレン 葬送のフリーレン 葬送のフリーレン 葬送のフリーレン"
+local trunc_cjk = utils.truncate_text(cjk_title, 200, 14, false)
+assert_true("CJK text ends with ellipsis", trunc_cjk:find("%.%.%.$") ~= nil)
+assert_true("CJK text fits inside max_w", utils.estimate_text_width(trunc_cjk, 14, false) <= 200)
+
+-- 5d. Modal menu available width calculations
+local menu_w = 700
+local text_x = 66
+local avail_unselected = menu_w - text_x - 32
+local avail_active = menu_w - text_x - 150 -- Reserving space for '✓ Now Playing'
+assert_true("Unselected item has generous text width", avail_unselected > 500)
+assert_true("Active item reserves space for badge and has positive width", avail_active > 400)
+
+local active_long = utils.truncate_text(long_fn, avail_active, 12, false)
+assert_true("Active row long filename truncated to leave room for badge", utils.estimate_text_width(active_long, 12, false) <= avail_active)
+
 print(string.format("\n========================================================"))
 print(string.format("Player Environment Matrix Suite: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))
 print(string.format("========================================================"))
