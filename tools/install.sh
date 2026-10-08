@@ -99,7 +99,7 @@ else
     for inst in install.sh install.bat install.ps1 package_dist.py; do
         rm -f "$TARGET_DIR/tools/$inst" 2>/dev/null || true
     done
-    chmod +x "$TARGET_DIR/tools/"*.sh 2>/dev/null || true
+    find "$TARGET_DIR/tools" -maxdepth 1 -name "*.sh" -exec chmod +x {} + 2>/dev/null || true
 
     # Place convenient 1-click update.sh in target root
     cp "$TARGET_DIR/tools/update.sh" "$TARGET_DIR/update.sh" 2>/dev/null || true
@@ -140,6 +140,8 @@ if [ "$CANON_PKG" != "$CANON_TARGET" ]; then
             echo -e "${GREEN}✓ Preserving your existing TMDB API key in osc.conf${NC}"
             # Portable POSIX sed stream without in-place flag difference across BSD/GNU
             if [ -n "$SRC_OSC" ]; then
+                # Safe substitution avoiding delimiter collisions if EXISTING_KEY has pipes or slashes
+                awk -v k="$EXISTING_KEY" '/^tmdb_api_key=/{print "tmdb_api_key=" k; next} {print}' "$SRC_OSC" > "$OSC_CONF_DEST.new" 2>/dev/null || \
                 sed "s|^tmdb_api_key=.*|tmdb_api_key=$EXISTING_KEY|" "$SRC_OSC" > "$OSC_CONF_DEST.new"
                 mv "$OSC_CONF_DEST.new" "$OSC_CONF_DEST"
             fi
