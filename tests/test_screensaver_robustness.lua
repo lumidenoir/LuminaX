@@ -283,7 +283,19 @@ assert_eq("Dim logo brightened", eval_logo_luminance(dim_gray), 'eq=brightness=0
 
 print("\n=== 6. Testing Studio Extraction & Holding Company Filtering ===")
 
-package.loaded['mp.assdraw'] = { ass_new = function() return {} end }
+local function make_mock_ass()
+    local o = { text = '' }
+    function o:new_event() end
+    function o:pos() end
+    function o:an() end
+    function o:append(s) o.text = o.text .. (s or '') end
+    function o:draw_start() end
+    function o:draw_stop() end
+    function o:rect_cw() end
+    function o:round_rect_cw() end
+    return o
+end
+package.loaded['mp.assdraw'] = { ass_new = make_mock_ass }
 package.loaded['mp.utils'] = {
     file_info = function() return nil end,
     readdir = function() return {} end,
@@ -319,10 +331,17 @@ _G.mp = _G.mp or {
     observe_property = function() end,
     get_property = function() return '' end,
     get_property_native = function() return nil end,
+    get_property_number = function() return 0 end,
+    format_time = function() return '' end,
     set_property_native = function() end,
     command_native = function() return '' end,
     commandv = function() end,
     add_timeout = function() return { kill = function() end } end,
+    add_periodic_timer = function() return { kill = function() end } end,
+    get_time = function() return os.clock() end,
+    get_osd_size = function() return 1920, 1080 end,
+    add_forced_key_binding = function() end,
+    remove_key_binding = function() end,
 }
 
 local ss = require('modules.screensaver')
@@ -605,6 +624,40 @@ local fallback_rows = generate_ambient_rows('/media/movies/LocalMovie.2024.mkv',
 assert_eq("Ambient card generates 3 fallback rows when metadata fetch fails", #fallback_rows, 3)
 assert_eq("Ambient card preserves audio codec", fallback_rows[2].val, "EAC3 6ch")
 assert_eq("Ambient card preserves resolution quality", fallback_rows[3].val, "1080p FHD")
+
+print("\n=== 12. Testing Exported Formal Screensaver FSM (R16) ===")
+assert_true("ss.SS_STATE table exported", type(ss.SS_STATE) == 'table')
+assert_eq("SS_STATE.IDLE defined", ss.SS_STATE.IDLE, 'IDLE')
+assert_eq("SS_STATE.ARMED defined", ss.SS_STATE.ARMED, 'ARMED')
+assert_eq("SS_STATE.FADING_IN defined", ss.SS_STATE.FADING_IN, 'FADING_IN')
+assert_eq("SS_STATE.ACTIVE defined", ss.SS_STATE.ACTIVE, 'ACTIVE')
+assert_eq("SS_STATE.FADING_OUT defined", ss.SS_STATE.FADING_OUT, 'FADING_OUT')
+assert_eq("Initial FSM state is IDLE", ss.get_fsm_state(), ss.SS_STATE.IDLE)
+assert_eq("Initial is_active is false", ss.is_active(), false)
+
+ss.fsm_transition(ss.SS_STATE.ARMED, 'test_pause')
+assert_eq("Transition to ARMED sets state", ss.get_fsm_state(), ss.SS_STATE.ARMED)
+assert_eq("ARMED state is_active is false", ss.is_active(), false)
+
+ss.fsm_transition(ss.SS_STATE.FADING_IN, 'test_timeout')
+assert_eq("Transition to FADING_IN sets state", ss.get_fsm_state(), ss.SS_STATE.FADING_IN)
+assert_eq("FADING_IN state is_active is true", ss.is_active(), true)
+
+ss.fsm_transition(ss.SS_STATE.ACTIVE, 'test_fade_complete')
+assert_eq("Transition to ACTIVE sets state", ss.get_fsm_state(), ss.SS_STATE.ACTIVE)
+assert_eq("ACTIVE state is_active is true", ss.is_active(), true)
+
+ss.fsm_transition(ss.SS_STATE.FADING_OUT, 'test_user_activity')
+assert_eq("Transition to FADING_OUT sets state", ss.get_fsm_state(), ss.SS_STATE.FADING_OUT)
+assert_eq("FADING_OUT state is_active is true", ss.is_active(), true)
+
+ss.fsm_transition(ss.SS_STATE.IDLE, 'test_fade_out_complete')
+assert_eq("Transition to IDLE resets state", ss.get_fsm_state(), ss.SS_STATE.IDLE)
+assert_eq("IDLE state is_active is false", ss.is_active(), false)
+
+ss.inhibit()
+assert_eq("Inhibit ensures IDLE state", ss.get_fsm_state(), ss.SS_STATE.IDLE)
+assert_eq("Inhibit ensures inactive", ss.is_active(), false)
 
 print(string.format("\n========================================================"))
 print(string.format("Screensaver Robustness Suite: %d / %d Passed (%.1f%%)", pass_count, test_count, (pass_count/test_count)*100))

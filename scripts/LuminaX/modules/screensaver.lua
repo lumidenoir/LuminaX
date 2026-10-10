@@ -86,6 +86,18 @@ local SS_OUT_DUR        = 0.16   -- smooth fade-out duration (160ms)
 local ss_alpha          = 255    -- current overlay alpha (255=invisible, 0=opaque)
 local ss_overlay_logo   = false  -- whether hardware overlay 1 is currently active
 local ss_hiding         = false
+local ss_active         = false
+
+-- Formal Finite State Machine (FSM)
+local SS_STATE = {
+    IDLE       = 'IDLE',
+    ARMED      = 'ARMED',
+    FADING_IN  = 'FADING_IN',
+    ACTIVE     = 'ACTIVE',
+    FADING_OUT = 'FADING_OUT',
+}
+local ss_state = SS_STATE.IDLE
+local fsm_transition
 
 -- TMDB metadata cache (keyed by media-title)
 local tmdb_cache = {}
@@ -284,7 +296,10 @@ local function render_screensaver(alpha)
         return
     end
 
-    local osd_w, osd_h = mp.get_osd_size()
+    local osd_w, osd_h
+    if mp and mp.get_osd_size then
+        osd_w, osd_h = mp.get_osd_size()
+    end
     osd_w = (osd_w and osd_w > 0) and osd_w or 1920
     osd_h = (osd_h and osd_h > 0) and osd_h or 1080
 
@@ -510,9 +525,9 @@ local function render_screensaver(alpha)
                 local domain = curr_path:match('^%a[%w+.-]*://([^/]+)') or 'Stream'
                 table.insert(rows, {label = 'Source', val = domain:gsub('^www%.', '')})
             end
-            local d = mp.get_property_number('duration', 0)
+            local d = (mp.get_property_number and mp.get_property_number('duration', 0)) or tonumber(mp.get_property and mp.get_property('duration')) or 0
             local ends_t = format_ends_time(d > 0 and math.floor(d / 60) or nil)
-            local dur_str = (d > 0) and (mp.format_time(d) or (utils.format_time and utils.format_time(d)) or '') or ''
+            local dur_str = (d > 0) and ((mp.format_time and mp.format_time(d)) or (utils_mod and utils_mod.format_time and utils_mod.format_time(d)) or '') or ''
             if ends_t then
                 ss_last_ends_t = ends_t
                 table.insert(rows, {label = 'Runtime', val = (dur_str ~= '' and (dur_str .. ' • ') or '') .. 'Ends ' .. ends_t})
@@ -879,21 +894,14 @@ local function ss_schedule_next_minute()
     end)
 end
 
+local function ss_get_time()
+    return (mp and mp.get_time and mp.get_time()) or os.clock()
+end
+
 local function ss_fade_step()
-    local t = (mp.get_time() - ss_fade_start) / get_fade_dur()
+    local t = (ss_get_time() - ss_fade_start) / get_fade_dur()
     if t >= 1.0 then
-        ss_alpha = 0
-        render_screensaver(0)
-        if ss_fade_timer then ss_fade_timer:kill(); ss_fade_timer = nil end
-        ss_schedule_next_minute()
-        local anti_burnin_opt = user_opts.screensaver_anti_burnin
-        if not ss_burnin_timer and (anti_burnin_opt == true or anti_burnin_opt == 'yes') then
-            ss_burnin_timer = mp.add_periodic_timer(20, function()
-                if ss_active and not ss_hiding and ss_alpha == 0 then
-                    render_screensaver(0)
-                end
-            end)
-        end
+        fsm_transition(SS_STATE.ACTIVE, 'fade_in_complete')
         return
     end
     local ease = t * t
@@ -902,21 +910,9 @@ local function ss_fade_step()
 end
 
 local function ss_fade_out_step()
-    local t = (mp.get_time() - ss_fade_start) / SS_OUT_DUR
+    local t = (ss_get_time() - ss_fade_start) / SS_OUT_DUR
     if t >= 1.0 then
-        if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
-        if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
-        ss_last_ends_t = nil
-        ss_active = false
-        ss_hiding = false
-        ss_overlay:remove()
-        ss_remove_logo()
-        pcall(mp.remove_key_binding, 'ss_esc_dismiss')
-        if ss_fade_out_timer then ss_fade_out_timer:kill(); ss_fade_out_timer = nil end
-        if user_opts.showonpause and mp.get_property_native('pause') then
-            show_osc()
-        end
-        request_tick()
+        fsm_transition(SS_STATE.IDLE, 'fade_out_complete')
         return
     end
     local ease = t * t
@@ -924,38 +920,120 @@ local function ss_fade_out_step()
     render_screensaver(ss_alpha)
 end
 
+local function fsm_cleanup_timers(target)
+    if target == SS_STATE.IDLE then
+        if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
+        if ss_fade_timer then ss_fade_timer:kill(); ss_fade_timer = nil end
+        if ss_fade_out_timer then ss_fade_out_timer:kill(); ss_fade_out_timer = nil end
+        if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
+        if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
+        ss_last_ends_t = nil
+        ss_overlay:remove()
+        ss_remove_logo()
+        pcall(mp.remove_key_binding, 'ss_esc_dismiss')
+    elseif target == SS_STATE.ARMED then
+        if ss_fade_timer then ss_fade_timer:kill(); ss_fade_timer = nil end
+        if ss_fade_out_timer then ss_fade_out_timer:kill(); ss_fade_out_timer = nil end
+        if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
+        if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
+        ss_last_ends_t = nil
+        ss_overlay:remove()
+        ss_remove_logo()
+        pcall(mp.remove_key_binding, 'ss_esc_dismiss')
+    elseif target == SS_STATE.FADING_IN then
+        if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
+        if ss_fade_out_timer then ss_fade_out_timer:kill(); ss_fade_out_timer = nil end
+        if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
+        ss_last_ends_t = nil
+    elseif target == SS_STATE.ACTIVE then
+        if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
+        if ss_fade_timer then ss_fade_timer:kill(); ss_fade_timer = nil end
+        if ss_fade_out_timer then ss_fade_out_timer:kill(); ss_fade_out_timer = nil end
+    elseif target == SS_STATE.FADING_OUT then
+        if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
+        if ss_fade_timer then ss_fade_timer:kill(); ss_fade_timer = nil end
+        if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
+        if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
+        ss_last_ends_t = nil
+    end
+end
+
+fsm_transition = function(target, reason)
+    if ss_state == target then return end
+
+    fsm_cleanup_timers(target)
+    local prev = ss_state
+    ss_state = target
+
+    if target == SS_STATE.IDLE then
+        ss_active = false
+        ss_hiding = false
+        if user_opts.showonpause and mp.get_property_native and mp.get_property_native('pause') and reason ~= 'inhibit' then
+            show_osc()
+        end
+        request_tick()
+    elseif target == SS_STATE.ARMED then
+        ss_active = false
+        ss_hiding = false
+        if ss_delay_timer then ss_delay_timer:kill() end
+        if mp.add_timeout then
+            ss_delay_timer = mp.add_timeout(get_screensaver_delay(), function()
+                activate_screensaver()
+            end)
+        end
+    elseif target == SS_STATE.FADING_IN then
+        hide_osc()
+        ss_active = true
+        ss_hiding = false
+        ss_fade_start = ss_get_time()
+        ss_alpha = 255
+        if ss_fade_timer then ss_fade_timer:kill() end
+        if mp.add_periodic_timer then
+            ss_fade_timer = mp.add_periodic_timer(0.033, ss_fade_step)
+        end
+        pcall(mp.add_forced_key_binding, 'ESC', 'ss_esc_dismiss', function() ss_hide() end)
+        request_tick()
+    elseif target == SS_STATE.ACTIVE then
+        ss_active = true
+        ss_hiding = false
+        ss_alpha = 0
+        render_screensaver(0)
+        ss_schedule_next_minute()
+        local anti_burnin_opt = user_opts.screensaver_anti_burnin
+        if not ss_burnin_timer and (anti_burnin_opt == true or anti_burnin_opt == 'yes') then
+            if mp.add_periodic_timer then
+                ss_burnin_timer = mp.add_periodic_timer(20, function()
+                    if ss_state == SS_STATE.ACTIVE and ss_alpha == 0 then
+                        render_screensaver(0)
+                    end
+                end)
+            end
+        end
+    elseif target == SS_STATE.FADING_OUT then
+        ss_active = true
+        ss_hiding = true
+        ss_fade_start = ss_get_time()
+        if ss_fade_out_timer then ss_fade_out_timer:kill() end
+        if mp.add_periodic_timer then
+            ss_fade_out_timer = mp.add_periodic_timer(0.025, ss_fade_out_step)
+        end
+    end
+end
+
 ss_hide = function(immediate)
     if immediate then
         ss_remove_logo()
     end
-    if not ss_active and not ss_delay_timer and not ss_hiding then return end
-    if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
-    if ss_fade_timer  then ss_fade_timer:kill();  ss_fade_timer  = nil end
-    if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
-    if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
-    ss_last_ends_t = nil
+    if ss_state == SS_STATE.IDLE and not ss_active and not ss_delay_timer and not ss_hiding then return end
 
-    if immediate or not ss_active or not mp.get_property_native('pause') then
-        if ss_fade_out_timer then ss_fade_out_timer:kill(); ss_fade_out_timer = nil end
-        if ss_burnin_timer then ss_burnin_timer:kill(); ss_burnin_timer = nil end
-        ss_active = false
-        ss_hiding = false
-        ss_overlay:remove()
-        ss_remove_logo()
-        pcall(mp.remove_key_binding, 'ss_esc_dismiss')
-        if user_opts.showonpause and mp.get_property_native('pause') then
-            show_osc()
-        end
-        request_tick()
-        return
-    end
-
-    -- Smooth 160ms fade out when dismissed while remaining paused
-    if not ss_hiding then
-        ss_hiding = true
-        ss_fade_start = mp.get_time()
-        if ss_fade_out_timer then ss_fade_out_timer:kill() end
-        ss_fade_out_timer = mp.add_periodic_timer(0.025, ss_fade_out_step)
+    if immediate or not mp.get_property_native('pause') then
+        fsm_transition(SS_STATE.IDLE, 'hide_immediate')
+    elseif ss_state == SS_STATE.ARMED then
+        fsm_transition(SS_STATE.IDLE, 'hide_armed')
+    elseif ss_state == SS_STATE.ACTIVE or ss_state == SS_STATE.FADING_IN then
+        fsm_transition(SS_STATE.FADING_OUT, 'hide_smooth')
+    else
+        fsm_transition(SS_STATE.IDLE, 'hide_default')
     end
 end
 
@@ -963,23 +1041,11 @@ local is_menu_active_fn = nil
 
 activate_screensaver = function()
     if not user_opts.screensaver_enabled then return end
-    if ss_active and not ss_hiding then return end
+    if (ss_state == SS_STATE.ACTIVE or ss_state == SS_STATE.FADING_IN) and not ss_hiding then return end
     if not mp.get_property_native('pause') then return end
-    if state.menu_active or menu_closing then return end
-    if is_menu_active_fn and is_menu_active_fn() then return end
-    hide_osc()
-    if ss_clock_timer then ss_clock_timer:kill(); ss_clock_timer = nil end
-    ss_last_ends_t = nil
-    ss_active      = true
-    ss_hiding      = false
-    ss_fade_start  = mp.get_time()
-    ss_alpha       = 255
-    if ss_fade_timer then ss_fade_timer:kill() end
-    if ss_fade_out_timer then ss_fade_out_timer:kill(); ss_fade_out_timer = nil end
-    ss_fade_timer  = mp.add_periodic_timer(0.033, ss_fade_step)
-    -- Intercept ESC to dismiss screensaver cleanly without exiting fullscreen
-    pcall(mp.add_forced_key_binding, 'ESC', 'ss_esc_dismiss', function() ss_hide() end)
-    request_tick()
+    if (state and state.menu_active) or (is_menu_active_fn and is_menu_active_fn()) then return end
+
+    fsm_transition(SS_STATE.FADING_IN, 'activate')
 end
 
 -- ── TMDB fetch & logo processing ──────────────────────────────────────────────
@@ -2089,15 +2155,11 @@ mp.register_event('file-loaded', function()
     tmdb_current  = nil
     tmdb_fetching = false
     last_parsed_title = nil
-    ss_hide()
+    fsm_transition(SS_STATE.IDLE, 'file_loaded')
     -- Immediately check cache & metadata on file-loaded for subtitle presets & skip detection
     debounced_fetch_tmdb(0.05)
     if mp.get_property_native('pause') and user_opts.screensaver_enabled then
-        if ss_delay_timer then ss_delay_timer:kill() end
-        ss_delay_timer = mp.add_timeout(
-            get_screensaver_delay(),
-            activate_screensaver
-        )
+        fsm_transition(SS_STATE.ARMED, 'file_loaded_paused')
     end
 end)
 
@@ -2116,17 +2178,12 @@ mp.observe_property('pause', 'bool', function(_, paused)
         if state.menu_active or (is_menu_active_fn and is_menu_active_fn()) then return end
         -- Debounce TMDB fetch to handle rapid pause/unpause toggles
         debounced_fetch_tmdb(0.25)
-        -- Delay before screensaver activates
-        if ss_delay_timer then ss_delay_timer:kill() end
-        ss_delay_timer = mp.add_timeout(
-            get_screensaver_delay(),
-            activate_screensaver
-        )
+        fsm_transition(SS_STATE.ARMED, 'pause_observer')
     else
         abort_all_subprocesses()
         if tmdb_debounce_timer then tmdb_debounce_timer:kill(); tmdb_debounce_timer = nil end
         tmdb_fetching = false
-        ss_hide(true) -- immediate on unpause
+        fsm_transition(SS_STATE.IDLE, 'unpause')
     end
 end)
 
@@ -2150,21 +2207,17 @@ mp.observe_property('mouse-pos', 'native', function(_, mpos)
     local dx = math.abs(mx - last_ss_mx)
     local dy = math.abs(my - last_ss_my)
 
-    if ss_active then
+    if ss_state == SS_STATE.ACTIVE or ss_state == SS_STATE.FADING_IN then
         -- Require intentional mouse movement to dismiss screensaver (ignore minor table bump jitter)
         if dx >= 8 or dy >= 8 then
             last_ss_mx, last_ss_my = mx, my
             ss_hide()
         end
-    else
+    elseif ss_state == SS_STATE.ARMED then
         -- When screensaver is pending, movement resets the activation timer
         if dx >= 4 or dy >= 4 then
             last_ss_mx, last_ss_my = mx, my
-            if ss_delay_timer then ss_delay_timer:kill() end
-            ss_delay_timer = mp.add_timeout(
-                get_screensaver_delay(),
-                activate_screensaver
-            )
+            fsm_transition(SS_STATE.ARMED, 'mouse_reset')
         end
     end
 end)
@@ -2179,7 +2232,7 @@ mp.observe_property('time-pos', 'number', function(_, pos)
     end
     if math.abs(pos - last_seek_time) >= 0.8 then
         last_seek_time = pos
-        if ss_active then
+        if ss_state == SS_STATE.ACTIVE or ss_state == SS_STATE.FADING_IN then
             ss_hide()
         end
     end
@@ -2203,7 +2256,11 @@ function M.init(ctx)
 end
 
 function M.is_active()
-    return ss_active
+    return ss_state == SS_STATE.ACTIVE or ss_state == SS_STATE.FADING_IN or ss_state == SS_STATE.FADING_OUT
+end
+
+function M.get_fsm_state()
+    return ss_state
 end
 
 function M.get_current()
@@ -2221,9 +2278,7 @@ end
 function M.inhibit()
     abort_all_subprocesses()
     if tmdb_debounce_timer then tmdb_debounce_timer:kill(); tmdb_debounce_timer = nil end
-    if ss_delay_timer then ss_delay_timer:kill(); ss_delay_timer = nil end
-    if ss_hide then ss_hide(true) end
-    ss_remove_logo()
+    fsm_transition(SS_STATE.IDLE, 'inhibit')
 end
 
 function M.render(alpha)
@@ -2292,5 +2347,7 @@ M.wrap_lines                = wrap_lines
 M.adaptive_scale_title      = adaptive_scale_title
 M.set_current               = set_tmdb_current
 M.render                    = render_screensaver
+M.SS_STATE                  = SS_STATE
+M.fsm_transition            = fsm_transition
 
 return M

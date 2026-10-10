@@ -15,6 +15,8 @@ package.path = script_dir .. '/?.lua;' .. script_dir .. '/modules/?.lua;' .. pac
 -- Load Subsystems
 local version     = require('version')
 local utils       = require('modules.utils')
+local events_mod  = require('modules.events')
+local events      = events_mod.shared
 local osc         = require('modules.osc')
 local huds        = require('modules.huds')
 local tag_editor  = require('modules.tag_editor')
@@ -30,113 +32,142 @@ local state       = osc.get_state()
 local osc_param   = osc.get_osc_param()
 local icons       = osc.get_icons()
 
-local function create_modal_close_handler()
-    return function()
-        if mp.get_property_native('pause') and user_opts.screensaver_enabled then
-            screensaver.inhibit()
-            local delay = math.max(1, tonumber(user_opts.screensaver_delay) or 3)
-            mp.add_timeout(delay, function()
-                if not menu.is_active() and not tag_editor.is_active() then
-                    screensaver.activate()
-                end
-            end)
-        end
-        if smart_skip and smart_skip.update_overlay then
-            smart_skip.update_overlay()
-        end
+-- Event Bus Domain Listeners
+events.on('modal:close', function(modal_name)
+    if mp.get_property_native('pause') and user_opts.screensaver_enabled then
+        screensaver.inhibit()
+        local delay = math.max(1, tonumber(user_opts.screensaver_delay) or 3)
+        mp.add_timeout(delay, function()
+            if not menu.is_active() and not tag_editor.is_active() then
+                screensaver.activate()
+            end
+        end)
     end
-end
+    if smart_skip and smart_skip.update_overlay then
+        smart_skip.update_overlay()
+    end
+end)
+
+events.on('modal:open', function(modal_name)
+    screensaver.inhibit()
+    osc.hide_osc()
+    if modal_name == 'tag_editor' and menu.is_active() then
+        menu.menu_close()
+    end
+    if smart_skip and smart_skip.update_overlay then
+        smart_skip.update_overlay()
+    end
+end)
+
+events.on('screensaver:inhibit', function()
+    screensaver.inhibit()
+end)
+
+events.on('screensaver:activate', function()
+    screensaver.activate()
+end)
+
+events.on('screensaver:hide', function(imm)
+    screensaver.hide(imm)
+end)
+
+events.on('tmdb:loaded', function(data)
+    if subtitle and subtitle.on_tmdb_loaded then
+        subtitle.on_tmdb_loaded(data)
+    end
+end)
+
+events.on('tag:updated', function()
+    screensaver.fetch_data(true)
+end)
+
+events.on('tick:request', function()
+    osc.request_tick()
+end)
 
 -- 1. Initialize Tag Editor
 tag_editor.init({
+    events            = events,
     utils             = utils,
     user_opts         = user_opts,
     osc_param         = osc_param,
     get_virt_mouse_pos= osc.get_virt_mouse_pos,
-    request_tick      = osc.request_tick,
-    on_open           = function()
-        if menu.is_active() then menu.menu_close() end
-        screensaver.inhibit()
-    end,
-    on_close          = create_modal_close_handler(),
+    request_tick      = function() events.emit('tick:request') end,
+    on_open           = function() events.emit('modal:open', 'tag_editor') end,
+    on_close          = function() events.emit('modal:close', 'tag_editor') end,
 })
 
 -- 2. Initialize Screensaver
 screensaver.init({
+    events         = events,
     user_opts      = user_opts,
     state          = state,
     hide_osc       = osc.hide_osc,
     show_osc       = osc.show_osc,
-    request_tick   = osc.request_tick,
+    request_tick   = function() events.emit('tick:request') end,
     utils          = utils,
     is_menu_active = function()
         return (menu and menu.is_active and menu.is_active()) or
                (tag_editor and tag_editor.is_active and tag_editor.is_active())
     end,
     on_tmdb_loaded = function(data)
-        if subtitle and subtitle.on_tmdb_loaded then
-            subtitle.on_tmdb_loaded(data)
-        end
+        events.emit('tmdb:loaded', data)
     end,
 })
 
 -- 3. Initialize HUDs
 huds.init({
+    events          = events,
     icons           = icons,
     utils           = utils,
     get_canvas_size = function() return utils.get_canvas_size(osc_param) end,
     make_pill_ass   = utils.make_pill_ass,
     on_interaction  = function()
-        screensaver.hide()
+        events.emit('screensaver:hide')
     end,
 })
 
 -- 4. Initialize Subtitle Subsystem
 subtitle.init({
+    events       = events,
     utils        = utils,
     user_opts    = user_opts,
     state        = state,
     osc_param    = osc_param,
-    request_tick = osc.request_tick,
+    request_tick = function() events.emit('tick:request') end,
     screensaver  = screensaver,
     huds         = huds,
 })
 
 -- 5. Initialize Menu
 menu.init({
+    events            = events,
     subtitle          = subtitle,
     state             = state,
     user_opts         = user_opts,
     osc_param         = osc_param,
     get_track         = osc.get_track,
     get_virt_mouse_pos= osc.get_virt_mouse_pos,
-    request_tick      = osc.request_tick,
+    request_tick      = function() events.emit('tick:request') end,
     tag_editor        = tag_editor,
     utils             = utils,
     screensaver       = screensaver,
     huds              = huds,
     get_tmdb_current  = screensaver.get_current,
-    inhibit_screensaver = screensaver.inhibit,
-    on_open           = function()
-        screensaver.inhibit()
-        osc.hide_osc()
-        if smart_skip and smart_skip.update_overlay then
-            smart_skip.update_overlay()
-        end
-    end,
-    on_close          = create_modal_close_handler(),
-    on_tag_updated    = function()
-        screensaver.fetch_data(true)
-    end,
+    inhibit_screensaver = function() events.emit('screensaver:inhibit') end,
+    on_open           = function() events.emit('modal:open', 'menu') end,
+    on_close          = function() events.emit('modal:close', 'menu') end,
+    on_tag_updated    = function() events.emit('tag:updated') end,
 })
 
 -- 6. Initialize Smart Skip & Next Episode Binge
 smart_skip.init({
+    events          = events,
     user_opts       = user_opts,
     state           = state,
     utils           = utils,
     huds            = huds,
-    request_tick    = osc.request_tick,
+    request_tick    = function() events.emit('tick:request') end,
     get_tmdb_current= screensaver.get_current,
     get_canvas_size = function() return utils.get_canvas_size(osc_param) end,
     get_virt_mouse_pos = osc.get_virt_mouse_pos,

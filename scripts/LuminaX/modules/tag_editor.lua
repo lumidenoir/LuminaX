@@ -1,5 +1,5 @@
 -- ============================================================================
--- ModernH Module: Tag Editor & OSD Text Input
+-- LuminaX Module: Tag Editor & OSD Text Input
 -- Cross-platform in-player OSD text input modal & mkvpropedit metadata writer
 -- ============================================================================
 

@@ -4,6 +4,7 @@
 -- ============================================================================
 
 local mp_utils = require('mp.utils')
+local utils    = require('modules.utils')
 
 local M = {}
 
@@ -1909,6 +1910,7 @@ function M.render(ass)
         end
     end
 
+    local is_pl = (state and state.menu_active == 'playlist')
     for i = 1, vis do
         local ai   = i + scroll
         local item = items[ai]
