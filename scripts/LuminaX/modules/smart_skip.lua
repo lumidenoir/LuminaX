@@ -51,6 +51,16 @@ local manual_dismiss_until = nil
 local skip_seek_cooldown_until = nil
 local SKIP_SEEK_COOLDOWN_SEC = 1.5
 
+local function is_player_paused()
+    if mp and mp.get_property_bool then
+        return mp.get_property_bool('pause', false)
+    elseif mp and mp.get_property then
+        local p = mp.get_property('pause')
+        return p == 'yes' or p == true
+    end
+    return false
+end
+
 local function is_series_context()
     if not utils_mod then return false end
     local fn = mp.get_property('filename')
@@ -128,12 +138,19 @@ local function execute_action()
     local target = tonumber(btn.target_time)
     local kind = btn.kind
 
-    -- Dismiss immediately on activation
-    dismiss_all(false, true)
+    -- Dismiss immediately on activation (manual dismissal flag set)
+    dismiss_all(true, true)
 
     if kind == 'skip' then
         if target and target > 0 then
-            mp.commandv('seek', target, 'absolute+exact')
+            skip_seek_cooldown_until = mp.get_time() + SKIP_SEEK_COOLDOWN_SEC
+            local dur = mp.get_property_number('duration', 0) or 0
+            local seek_t = target
+            if dur > 0 and (target + 0.05) < dur then
+                seek_t = target + 0.05
+            end
+            manual_dismiss_until = seek_t + 2.0
+            mp.commandv('seek', seek_t, 'absolute+exact')
         end
     elseif kind == 'next_ep' then
         mp.commandv('playlist-next')
@@ -508,8 +525,9 @@ local function start_button_loop()
 
         -- 3. Countdown progression
         if active_btn.is_active then
-            -- Micro-UX: Hover freezes timer and pauses progress rail
-            if not is_hover then
+            -- Micro-UX: Hover or player pause freezes timer and pauses progress rail
+            local is_paused = is_player_paused()
+            if not is_hover and not is_paused then
                 active_btn.elapsed = (active_btn.elapsed or 0) + dt
                 local progress = active_btn.elapsed / active_btn.total_sec
                 if progress >= 1.0 then
@@ -673,11 +691,18 @@ local function on_chapter_changed(ch_idx)
         end_t = chapters[ch_idx + 2].time
     end
 
+    -- Guard: if playback position is already at or past the end of this chapter zone,
+    -- skipping has already occurred or the zone has ended; don't re-trigger button.
+    local cur_pos = mp.get_property_number('time-pos', 0) or 0
+    if cur_pos >= (end_t - 0.5) then
+        return
+    end
+
     if mode == 'auto' then
         -- Guard: don't auto-skip while paused — the user hasn't started watching yet.
         -- Seeking while paused lands at end_t and immediately re-fires chapter changed,
         -- causing an infinite skip loop.
-        local is_paused = mp.get_property_bool('pause', false)
+        local is_paused = is_player_paused()
         if is_paused then
             -- Fall through to show the pill instead so the user can decide
             trigger_skip_pill(stype, start_t, end_t, title)
@@ -685,7 +710,9 @@ local function on_chapter_changed(ch_idx)
         end
         -- Arm cooldown BEFORE the seek so the resulting chapter event is ignored
         skip_seek_cooldown_until = mp.get_time() + SKIP_SEEK_COOLDOWN_SEC
-        mp.commandv('seek', end_t, 'absolute+exact')
+        local seek_t = (dur > 0 and (end_t + 0.05) < dur) and (end_t + 0.05) or end_t
+        manual_dismiss_until = seek_t + 2.0
+        mp.commandv('seek', seek_t, 'absolute+exact')
     elseif mode == 'pill' then
         if stype == 'outro' and (user_opts.next_episode_card ~= false) and is_series then
             trigger_next_episode_card(start_t, end_t)
@@ -763,6 +790,12 @@ function M.init(ctx)
 
     mp.observe_property('seeking', 'bool', function()
         validate_active_button_position()
+    end)
+
+    mp.observe_property('pause', 'bool', function()
+        if active_btn then
+            M.update_overlay()
+        end
     end)
 
     mp.register_event('start-file', function()

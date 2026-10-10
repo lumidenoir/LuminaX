@@ -343,6 +343,30 @@ smart_skip.update_overlay()
 assert_eq(overlay_data.visible, true, 'Closing menu restores skip button')
 assert_true(keybindings['smart-skip-enter'] ~= nil, 'Closing menu rebinds skip enter key')
 
+-- 9. Paused playback freezes skip countdown and prevents auto-execution loop
+mock_props['pause'] = true
+mock_props['time-pos'] = 95
+mock_now = mock_now + 0.15
+observers['chapter']('chapter', 1)
+assert_eq(overlay_data.visible, true, 'Skip button active while paused in opening')
+
+-- Advance timer while paused
+if active_timer_cb then
+    mock_now = mock_now + 10.0  -- Advance 10 seconds (exceeds 6s countdown)
+    active_timer_cb()
+end
+assert_eq(overlay_data.visible, true, 'Countdown frozen while paused - does not auto-skip')
+
+-- 10. Skipping while paused seeks past boundary and avoids infinite re-trigger loop
+if keybindings['smart-skip-enter'] then
+    keybindings['smart-skip-enter']()
+    assert_eq(overlay_data.visible, false, 'Skip action immediately dismisses button')
+    -- Simulate mpv seek landing at chapter boundary while paused (180s)
+    mock_props['time-pos'] = 180
+    observers['chapter']('chapter', 1)
+    assert_eq(overlay_data.visible, false, 'No infinite loop: re-firing chapter after skip in pause mode does not re-open button')
+end
+
 print('\n----------------------------------------------------------------------')
 print(string.format('Test Results: %d passed, %d failed', passed, failed))
 print('----------------------------------------------------------------------')
