@@ -4,7 +4,7 @@
 -- ============================================================================
 
 local Version = {
-    VERSION            = '1.3.0',
+    VERSION            = '1.3.1',
     RELEASE_NAME       = 'LuminaX Smart Binge, Chapter Skip & Audio Enhancement Menu',
     RELEASE_DATE       = '2026-10-04',
     GITHUB_REPO        = 'lumidenoir/LuminaX',

@@ -25,6 +25,7 @@ SUITES = [
     {"name": "Updater & Config Security Matrix", "cmd": ["lua", "tests/test_updater_and_config_safety.lua"]},
     {"name": "Playlist Identification & Smart Skip Edge Cases", "cmd": ["lua", "tests/test_playlist_and_smart_skip.lua"]},
     {"name": "Pub/Sub Event Bus Architecture", "cmd": ["lua", "tests/test_event_bus.lua"]},
+    {"name": "Compound Interactions & Architecture Matrix", "cmd": ["lua", "tests/test_compound_interactions.lua"]},
 ]
 
 def main():

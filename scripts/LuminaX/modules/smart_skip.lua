@@ -50,6 +50,7 @@ local manual_dismiss_until = nil
 -- the seek itself from re-triggering the handler (infinite loop).
 local skip_seek_cooldown_until = nil
 local SKIP_SEEK_COOLDOWN_SEC = 1.5
+local execute_action = nil
 
 local function is_player_paused()
     if mp and mp.get_property_bool then
@@ -89,6 +90,35 @@ local function is_any_menu_active()
     return false
 end
 
+local function is_screensaver_active()
+    if ctx_ref and ctx_ref.screensaver and ctx_ref.screensaver.is_active then
+        return ctx_ref.screensaver.is_active()
+    end
+    return false
+end
+
+local function is_blocked()
+    return is_any_menu_active() or is_screensaver_active()
+end
+
+local mouse_click_bound = false
+
+local function bind_mouse_click()
+    if not mouse_click_bound then
+        mp.add_forced_key_binding('MBTN_LEFT', 'smart-skip-click', execute_action)
+        mp.add_forced_key_binding('mbtn_left', 'smart-skip-click-alias', execute_action)
+        mouse_click_bound = true
+    end
+end
+
+local function unbind_mouse_click()
+    if mouse_click_bound then
+        pcall(mp.remove_key_binding, 'smart-skip-click')
+        pcall(mp.remove_key_binding, 'smart-skip-click-alias')
+        mouse_click_bound = false
+    end
+end
+
 local function unbind_dynamic_keys()
     if dynamic_keys_bound then
         pcall(mp.remove_key_binding, 'smart-skip-enter')
@@ -96,6 +126,7 @@ local function unbind_dynamic_keys()
         pcall(mp.remove_key_binding, 'smart-skip-esc')
         dynamic_keys_bound = false
     end
+    unbind_mouse_click()
 end
 
 local function dismiss_immediate(manual)
@@ -132,7 +163,7 @@ local function dismiss_all(manual, immediate)
     end
 end
 
-local function execute_action()
+execute_action = function()
     if not active_btn then return end
     local btn = active_btn
     local target = tonumber(btn.target_time)
@@ -388,8 +419,8 @@ function M.update_overlay()
         return
     end
 
-    -- Strictly hide skip button & unbind hotkeys while any menu is open
-    if is_any_menu_active() then
+    -- Strictly hide skip button & unbind hotkeys while any menu or screensaver is open
+    if is_blocked() then
         unbind_dynamic_keys()
         overlay:remove()
         return
@@ -477,8 +508,8 @@ local function start_button_loop()
     active_btn.timer = mp.add_periodic_timer(0.033, function()
         if not active_btn then return end
 
-        -- Freeze countdown and hide overlay while any menu is open
-        if is_any_menu_active() then
+        -- Freeze countdown and hide overlay while any menu or screensaver is open
+        if is_blocked() then
             M.update_overlay()
             return
         end
@@ -515,13 +546,19 @@ local function start_button_loop()
         -- 2. Mouse hover detection
         local mx, my = get_mouse_coords()
         local is_hover = false
-        if active_btn.hitbox and mx >= active_btn.hitbox.x1 and mx <= active_btn.hitbox.x2
+        if not is_blocked() and active_btn.hitbox and mx >= active_btn.hitbox.x1 and mx <= active_btn.hitbox.x2
            and my >= active_btn.hitbox.y1 and my <= active_btn.hitbox.y2 then
             is_hover = true
         end
 
         local hover_changed = (active_btn.is_hover ~= is_hover)
         active_btn.is_hover = is_hover
+
+        if is_hover then
+            bind_mouse_click()
+        else
+            unbind_mouse_click()
+        end
 
         -- 3. Countdown progression
         if active_btn.is_active then
@@ -748,7 +785,7 @@ local function on_time_tick()
 end
 
 function M.handle_mouse_click(vx, vy)
-    if is_any_menu_active() then return false end
+    if is_blocked() then return false end
     if not active_btn or not active_btn.hitbox then return false end
 
     if not vx or not vy or vx < 0 or vy < 0 then
@@ -795,6 +832,36 @@ function M.init(ctx)
     mp.observe_property('pause', 'bool', function()
         if active_btn then
             M.update_overlay()
+        end
+    end)
+
+    if ctx.events then
+        ctx.events.on('screensaver:state', function()
+            M.update_overlay()
+        end)
+    end
+
+    mp.observe_property('mouse-pos', 'native', function(_, mpos)
+        if not active_btn or not active_btn.is_active or is_blocked() then
+            unbind_mouse_click()
+            return
+        end
+        local mx, my = get_mouse_coords()
+        if active_btn.hitbox and mx >= active_btn.hitbox.x1 and mx <= active_btn.hitbox.x2
+           and my >= active_btn.hitbox.y1 and my <= active_btn.hitbox.y2 then
+            local changed = not active_btn.is_hover
+            active_btn.is_hover = true
+            bind_mouse_click()
+            if changed then
+                M.update_overlay()
+            end
+        else
+            local changed = active_btn.is_hover
+            active_btn.is_hover = false
+            unbind_mouse_click()
+            if changed then
+                M.update_overlay()
+            end
         end
     end)
 

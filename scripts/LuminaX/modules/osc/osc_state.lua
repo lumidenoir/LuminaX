@@ -245,6 +245,16 @@ local thumbfast = {
     available = false,
 }
 
+local function set_thumbfast(data)
+    if type(data) ~= 'table' then return end
+    for k in pairs(thumbfast) do
+        thumbfast[k] = nil
+    end
+    for k, v in pairs(data) do
+        thumbfast[k] = v
+    end
+end
+
 -- ── Coordinates & Hit Testing Helpers ──────────────────────────────────────────
 
 local function get_virt_scale_factor()
@@ -423,6 +433,7 @@ M.language              = language
 M.texts                 = texts
 M.elements              = elements
 M.thumbfast             = thumbfast
+M.set_thumbfast         = set_thumbfast
 
 M.clear_elements        = clear_elements
 M.validate_user_opts    = validate_user_opts

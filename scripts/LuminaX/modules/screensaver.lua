@@ -14,6 +14,7 @@ local hide_osc     = function() end
 local show_osc     = function() end
 local request_tick = function() end
 local utils_mod    = nil
+local events       = nil
 
 local function tmdb_parse_title()
     if utils_mod and utils_mod.parse_clean_title then
@@ -964,6 +965,11 @@ fsm_transition = function(target, reason)
     fsm_cleanup_timers(target)
     local prev = ss_state
     ss_state = target
+
+    if events then
+        local is_vis = (target == SS_STATE.ACTIVE or target == SS_STATE.FADING_IN or target == SS_STATE.FADING_OUT)
+        events.emit('screensaver:state', is_vis)
+    end
 
     if target == SS_STATE.IDLE then
         ss_active = false
@@ -2247,6 +2253,7 @@ function M.init(ctx)
     utils_mod         = ctx.utils
     is_menu_active_fn = ctx.is_menu_active
     on_tmdb_loaded_cb = ctx.on_tmdb_loaded
+    events            = ctx.events
 
     if mp and mp.add_timeout then
         mp.add_timeout(10, function()

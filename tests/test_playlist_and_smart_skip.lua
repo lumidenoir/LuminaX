@@ -206,6 +206,7 @@ local mock_props = {
     ['playlist-pos'] = 0,
 }
 
+local mp_events = {}
 _G.mp = {
     create_osd_overlay = function()
         return {
@@ -215,7 +216,7 @@ _G.mp = {
         }
     end,
     observe_property = function(prop, typ, cb) observers[prop] = cb end,
-    register_event = function() end,
+    register_event = function(name, cb) mp_events[name] = cb end,
     get_property = function(name, def) return mock_props[name] ~= nil and mock_props[name] or def end,
     get_property_number = function(name, def) return tonumber(mock_props[name]) or def end,
     get_property_native = function(name, def) return mock_props[name] ~= nil and mock_props[name] or def end,
@@ -232,8 +233,12 @@ _G.mp = {
 }
 
 local mock_state = { osc_visible = false }
+local mock_ss_active = false
 local smart_skip = dofile('scripts/LuminaX/modules/smart_skip.lua')
 smart_skip.init({
+    screensaver = {
+        is_active = function() return mock_ss_active end,
+    },
     user_opts = {
         smart_skip_mode = 'pill',
         smart_skip_series_only = true,
@@ -366,6 +371,35 @@ if keybindings['smart-skip-enter'] then
     observers['chapter']('chapter', 1)
     assert_eq(overlay_data.visible, false, 'No infinite loop: re-firing chapter after skip in pause mode does not re-open button')
 end
+
+-- 11. Screensaver active state hides skip button and unbinds keys
+if mp_events['start-file'] then mp_events['start-file']() end
+mock_props['time-pos'] = 95
+mock_now = mock_now + 0.15
+observers['chapter']('chapter', 1)
+assert_eq(overlay_data.visible, true, 'Skip button active before screensaver activates')
+assert_true(keybindings['smart-skip-enter'] ~= nil, 'Skip enter key bound before screensaver')
+
+mock_ss_active = true
+smart_skip.update_overlay()
+assert_eq(overlay_data.visible, false, 'Screensaver activation strictly hides skip button')
+assert_eq(keybindings['smart-skip-enter'], nil, 'Screensaver activation unbinds skip enter key')
+assert_eq(keybindings['smart-skip-click'], nil, 'Screensaver activation unbinds mouse click')
+
+mock_ss_active = false
+smart_skip.update_overlay()
+assert_eq(overlay_data.visible, true, 'Screensaver dismissal restores skip button')
+assert_true(keybindings['smart-skip-enter'] ~= nil, 'Screensaver dismissal rebinds skip enter key')
+
+-- 12. Mouse hover binds MBTN_LEFT click and executes skip
+mock_mouse_x, mock_mouse_y = 1150, 560 -- Inside skip button hitbox (x: ~1108-1244, y: 550-582)
+if observers['mouse-pos'] then observers['mouse-pos']('mouse-pos', { x = 1150, y = 560 }) end
+assert_true(keybindings['smart-skip-click'] ~= nil, 'Hovering over skip button binds smart-skip-click (MBTN_LEFT)')
+
+-- Firing mouse click executes action
+keybindings['smart-skip-click']()
+assert_eq(overlay_data.visible, false, 'Clicking skip button executes action and dismisses')
+assert_eq(keybindings['smart-skip-click'], nil, 'Dismissed skip button unbinds click key')
 
 print('\n----------------------------------------------------------------------')
 print(string.format('Test Results: %d passed, %d failed', passed, failed))

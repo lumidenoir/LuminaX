@@ -34,14 +34,19 @@ local icons       = osc.get_icons()
 
 -- Event Bus Domain Listeners
 events.on('modal:close', function(modal_name)
-    if mp.get_property_native('pause') and user_opts.screensaver_enabled then
-        screensaver.inhibit()
-        local delay = math.max(1, tonumber(user_opts.screensaver_delay) or 3)
-        mp.add_timeout(delay, function()
-            if not menu.is_active() and not tag_editor.is_active() then
-                screensaver.activate()
-            end
-        end)
+    if mp.get_property_native('pause') then
+        if user_opts.showonpause ~= false or user_opts.visibility == 'always' then
+            osc.show_osc()
+        end
+        if user_opts.screensaver_enabled then
+            screensaver.inhibit()
+            local delay = math.max(1, tonumber(user_opts.screensaver_delay) or 3)
+            mp.add_timeout(delay, function()
+                if not menu.is_active() and not tag_editor.is_active() then
+                    screensaver.activate()
+                end
+            end)
+        end
     end
     if smart_skip and smart_skip.update_overlay then
         smart_skip.update_overlay()
@@ -69,6 +74,12 @@ end)
 
 events.on('screensaver:hide', function(imm)
     screensaver.hide(imm)
+end)
+
+events.on('screensaver:state', function(is_active)
+    if smart_skip and smart_skip.update_overlay then
+        smart_skip.update_overlay()
+    end
 end)
 
 events.on('tmdb:loaded', function(data)
@@ -163,6 +174,7 @@ menu.init({
 -- 6. Initialize Smart Skip & Next Episode Binge
 smart_skip.init({
     events          = events,
+    screensaver     = screensaver,
     user_opts       = user_opts,
     state           = state,
     utils           = utils,
