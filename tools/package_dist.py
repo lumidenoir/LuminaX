@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 LuminaX Distribution Packaging Script:
-Automates the creation of release-ready distribution archives for Linux and Windows:
-  - dist/luminaX-linux.tar.gz
-  - dist/luminaX-windows.zip
+Automates the creation of release-ready distribution archives for Linux, macOS, and Windows:
+  - dist/luminaX-v<version>-linux.tar.gz
+  - dist/luminaX-v<version>-macos.tar.gz
+  - dist/luminaX-v<version>-windows.zip
   - dist/checksums.txt
 Validates archive contents, integrity, and permissions.
 """
@@ -166,14 +167,6 @@ def build_packages():
 
     print(f"  ✓ Created: {win_zip} ({os.path.getsize(win_zip):,} bytes)")
 
-    # Produce unversioned aliases for backward compatibility with fixed-link down loaders
-    linux_compat = os.path.join(dist_dir, "luminaX-linux.tar.gz")
-    macos_compat = os.path.join(dist_dir, "luminaX-macos.tar.gz")
-    win_compat = os.path.join(dist_dir, "luminaX-windows.zip")
-    shutil.copy2(linux_tar, linux_compat)
-    shutil.copy2(macos_tar, macos_compat)
-    shutil.copy2(win_zip, win_compat)
-
     # Cleanup staging
     shutil.rmtree(stage_dir)
 
@@ -181,7 +174,7 @@ def build_packages():
     print("\n[4/5] Generating SHA256 Checksums...")
     checksum_file = os.path.join(dist_dir, "checksums.txt")
     checksums = []
-    for pkg in [linux_tar, macos_tar, win_zip, linux_compat, macos_compat, win_compat]:
+    for pkg in [linux_tar, macos_tar, win_zip]:
         csum = sha256_file(pkg)
         fname = os.path.basename(pkg)
         checksums.append(f"{csum}  {fname}")

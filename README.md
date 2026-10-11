@@ -23,9 +23,9 @@ Written in Lua with native FFmpeg integration. Requires no external Python runti
 
 LuminaX release archives contain the required scripts, fonts, and configuration templates. Download the appropriate archive for your operating system from GitHub Releases:
 
-* Linux: `luminaX-linux.tar.gz`
-* macOS: `luminaX-macos.tar.gz`
-* Windows: `luminaX-windows.zip`
+* Linux: `luminaX-v<version>-linux.tar.gz`
+* macOS: `luminaX-v<version>-macos.tar.gz`
+* Windows: `luminaX-v<version>-windows.zip`
 
 ### Automated Installation
 
@@ -40,7 +40,7 @@ LuminaX release archives contain the required scripts, fonts, and configuration 
 
 * **Windows:**
   > [!IMPORTANT]
-  > **Only run `install.bat` from the extracted package folder** (where you unzipped `luminaX-windows.zip`). Do **not** run `install.bat` from inside your destination mpv configuration folder.
+  > **Only run `install.bat` from the extracted package folder** (where you unzipped `luminaX-v*-windows.zip`). Do **not** run `install.bat` from inside your destination mpv configuration folder.
 
   Double-click `install.bat` or right-click `install.bat` and select **Run as administrator** (or launch from PowerShell):
   ```powershell
@@ -191,7 +191,7 @@ LuminaX includes an automated updater that preserves your existing configuration
 ## Frequently Asked Questions & Troubleshooting
 
 ### Where should I run `install.bat` vs `update.bat` on Windows?
-* **`install.bat`:** **Only run from the extracted package folder** (where you unzipped `luminaX-windows.zip`). It installs LuminaX into your mpv setup and creates the 1-click `update.bat` in your real config folder.
+* **`install.bat`:** **Only run from the extracted package folder** (where you unzipped `luminaX-v*-windows.zip`). It installs LuminaX into your mpv setup and creates the 1-click `update.bat` in your real config folder.
 * **`update.bat`:** **Only run from your real mpv configuration folder** (`%APPDATA%\mpv\` or `mpv\portable_config\`). It detects your active setup, creates an atomic backup, downloads the latest release, and updates scripts and fonts while preserving your `osc.conf`, custom keybindings, and TMDB key.
 
 ### Two controllers are showing on screen at the same time
